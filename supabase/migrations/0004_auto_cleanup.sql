@@ -1,0 +1,23 @@
+-- Auto-delete finished or abandoned games older than 2 hours.
+-- Cascade deletes remove all related players, rounds, submissions, and votes.
+-- Requires pg_cron extension (enabled in Supabase by default on Pro; on Free use Supabase Edge Functions scheduler instead).
+
+-- Uncomment below if pg_cron is available on your Supabase plan:
+-- select cron.schedule(
+--   'cleanup-old-games',
+--   '0 * * * *',  -- every hour
+--   $$
+--     delete from games
+--     where
+--       (status = 'finished' and created_at < now() - interval '2 hours')
+--       or (status = 'lobby'   and created_at < now() - interval '24 hours')
+--       or (status = 'playing' and created_at < now() - interval '12 hours');
+--   $$
+-- );
+
+-- Manual cleanup query (run in SQL Editor when needed):
+-- delete from games
+-- where
+--   (status = 'finished' and created_at < now() - interval '2 hours')
+--   or (status = 'lobby'   and created_at < now() - interval '24 hours')
+--   or (status = 'playing' and created_at < now() - interval '12 hours');

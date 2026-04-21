@@ -27,6 +27,7 @@ export interface GameRow {
   status: "lobby" | "playing" | "finished";
   host_player_id: string | null;
   current_round_id: string | null;
+  target_score: number;
 }
 
 export interface SubmissionRow {

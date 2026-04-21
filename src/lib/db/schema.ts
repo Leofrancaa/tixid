@@ -35,6 +35,7 @@ export const games = pgTable("games", {
   targetScore: integer("target_score").notNull().default(30),
   hostPlayerId: uuid("host_player_id"),
   currentRoundId: uuid("current_round_id"),
+  cardQueue: jsonb("card_queue").notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

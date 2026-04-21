@@ -75,6 +75,7 @@ export default function GameClient({
       votes={rt.votes}
       hand={me?.hand ?? []}
       gameStatus={rt.game.status}
+      targetScore={rt.game.target_score ?? 30}
     />
   );
 }

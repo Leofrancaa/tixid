@@ -14,6 +14,12 @@ export default function Lobby({
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  async function closeRoom() {
+    if (!confirm("Encerrar e apagar a sala?")) return;
+    await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    window.location.href = "/";
+  }
+
   async function start() {
     setStarting(true);
     setErr(null);
@@ -56,17 +62,25 @@ export default function Lobby({
       </section>
 
       {isHost ? (
-        <button
-          onClick={start}
-          disabled={starting || players.length < 3}
-          className="w-full rounded bg-dixit-gold px-4 py-3 text-lg text-ink disabled:opacity-50"
-        >
-          {players.length < 3
-            ? "Aguardando mín. 3 jogadores"
-            : starting
-            ? "Iniciando..."
-            : "Iniciar jogo"}
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={start}
+            disabled={starting || players.length < 3}
+            className="w-full rounded bg-dixit-gold px-4 py-3 text-lg text-ink disabled:opacity-50"
+          >
+            {players.length < 3
+              ? "Aguardando mín. 3 jogadores"
+              : starting
+              ? "Iniciando..."
+              : "Iniciar jogo"}
+          </button>
+          <button
+            onClick={closeRoom}
+            className="w-full rounded border border-red-500/50 py-2 text-sm text-red-400 hover:bg-red-500/10"
+          >
+            Encerrar sala
+          </button>
+        </div>
       ) : (
         <p className="text-center opacity-70">Aguardando o host iniciar...</p>
       )}
