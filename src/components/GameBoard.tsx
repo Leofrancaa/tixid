@@ -653,8 +653,11 @@ function VoteBoard({
   const [primaryPending, setPrimaryPending] = useState<string | null>(null);
   const [secondaryPending, setSecondaryPending] = useState<string | null>(null);
 
-  const hasPrimaryVote = votes.some((v) => v.voter_id === myPlayerId && !v.is_secondary);
-  const hasSecondaryVote = votes.some((v) => v.voter_id === myPlayerId && v.is_secondary);
+  // My confirmed votes from the server
+  const myPrimaryVote = votes.find((v) => v.voter_id === myPlayerId && !v.is_secondary);
+  const mySecondaryVote = votes.find((v) => v.voter_id === myPlayerId && v.is_secondary);
+  const hasPrimaryVote = !!myPrimaryVote;
+  const hasSecondaryVote = !!mySecondaryVote;
   const hasOdysseyMode = playerCount >= 7;
 
   const ordered = [...submissions].sort(
@@ -662,6 +665,8 @@ function VoteBoard({
   );
 
   const canPrimary = !imStoryteller && !hasPrimaryVote && !busy;
+  // For secondary: must have primary vote, 7+ players, no secondary yet
+  // Also: the card selected for secondary must differ from the primary vote
   const canSecondary = !imStoryteller && hasPrimaryVote && hasOdysseyMode && !hasSecondaryVote && !busy;
 
   function statusText() {
@@ -689,8 +694,13 @@ function VoteBoard({
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
         {ordered.map((s) => {
           const isOwn = s.id === mySubmission?.id;
-          const isPrimarySelected = s.id === primaryPending;
-          const isSecondarySelected = s.id === secondaryPending;
+          const isPrimaryPending = s.id === primaryPending;
+          const isSecondaryPending = s.id === secondaryPending;
+          // Confirmed votes from server
+          const isMyPrimaryVote = s.id === myPrimaryVote?.submission_id;
+          const isMySecondaryVote = s.id === mySecondaryVote?.submission_id;
+          // Can't use secondary on the same card already voted primary
+          const blockedForSecondary = canSecondary && isMyPrimaryVote;
 
           if (isOwn) {
             return (
@@ -715,20 +725,40 @@ function VoteBoard({
               <CardButton
                 imageUrl={imageMap[s.card_id] ?? ""}
                 onClick={
-                  canPrimary ? () => setPrimaryPending(isPrimarySelected ? null : s.id)
-                  : canSecondary ? () => setSecondaryPending(isSecondarySelected ? null : s.id)
+                  blockedForSecondary ? undefined
+                  : canPrimary ? () => setPrimaryPending(isPrimaryPending ? null : s.id)
+                  : canSecondary ? () => setSecondaryPending(isSecondaryPending ? null : s.id)
                   : undefined
                 }
                 onZoom={onZoom}
-                disabled={!canPrimary && !canSecondary}
-                selected={isPrimarySelected || isSecondarySelected}
+                disabled={(!canPrimary && !canSecondary) || blockedForSecondary}
+                selected={isPrimaryPending || isSecondaryPending || isMyPrimaryVote || isMySecondaryVote}
               />
-              {/* Badge showing which vote type is selected */}
-              {isPrimarySelected && (
-                <div className="absolute left-1 top-1 rounded bg-dixit-gold/90 px-1.5 py-0.5 font-label text-[9px] font-bold text-ink">1°</div>
+
+              {/* Confirmed primary vote badge */}
+              {isMyPrimaryVote && (
+                <div className="absolute left-1 top-1 flex items-center gap-1 rounded bg-dixit-gold px-1.5 py-0.5 font-label text-[9px] font-bold text-ink shadow">
+                  ✓ 1°
+                </div>
               )}
-              {isSecondarySelected && (
-                <div className="absolute left-1 top-1 rounded bg-dixit-rose/90 px-1.5 py-0.5 font-label text-[9px] font-bold text-parchment">2°</div>
+              {/* Confirmed secondary vote badge */}
+              {isMySecondaryVote && (
+                <div className="absolute left-1 top-1 flex items-center gap-1 rounded bg-dixit-rose px-1.5 py-0.5 font-label text-[9px] font-bold text-parchment shadow">
+                  ✓ 2°
+                </div>
+              )}
+              {/* Pending selection badges (before confirmation) */}
+              {!isMyPrimaryVote && isPrimaryPending && (
+                <div className="absolute left-1 top-1 rounded border border-dixit-gold/60 bg-ink/80 px-1.5 py-0.5 font-label text-[9px] font-bold text-dixit-gold">1°</div>
+              )}
+              {!isMySecondaryVote && isSecondaryPending && (
+                <div className="absolute left-1 top-1 rounded border border-dixit-rose/60 bg-ink/80 px-1.5 py-0.5 font-label text-[9px] font-bold text-dixit-rose">2°</div>
+              )}
+              {/* Blocked overlay for secondary vote (already voted here as primary) */}
+              {blockedForSecondary && (
+                <div className="absolute inset-0 flex items-center justify-center rounded bg-black/40">
+                  <span className="font-label text-[10px] uppercase tracking-widest text-parchment/50">já votado</span>
+                </div>
               )}
             </div>
           );

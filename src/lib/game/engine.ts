@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   cards,
@@ -199,6 +199,22 @@ export async function castVote(
   // Secondary votes only available for 7+ player games
   if (isSecondary && voters.length < 6)
     throw new GameError("NO_SECONDARY", "Voto secundário só disponível com 7+ jogadores");
+
+  // Fetch existing votes from this voter to enforce constraints
+  const myExistingVotes = await db
+    .select()
+    .from(roundVotes)
+    .where(and(eq(roundVotes.roundId, roundId), eq(roundVotes.voterId, voterId)));
+
+  const myPrimary = myExistingVotes.find((v) => !v.isSecondary);
+  const mySecondary = myExistingVotes.find((v) => v.isSecondary);
+
+  if (!isSecondary && myPrimary)
+    throw new GameError("ALREADY_VOTED", "Você já votou com o voto principal");
+  if (isSecondary && mySecondary)
+    throw new GameError("ALREADY_SECONDARY", "Você já usou seu voto secundário");
+  if (isSecondary && myPrimary && myPrimary.submissionId === submissionId)
+    throw new GameError("SAME_AS_PRIMARY", "Voto secundário deve ser em carta diferente do voto principal");
 
   await db.insert(roundVotes).values({ roundId, voterId, submissionId, isSecondary });
 

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameRealtime } from "@/hooks/useGameRealtime";
 import Lobby from "./Lobby";
 import GameBoard from "./GameBoard";
@@ -29,6 +29,7 @@ export default function GameClient({
 }) {
   const rt = useGameRealtime(gameId);
   const [me, setMe] = useState<MeData | null>(null);
+  const gameEverLoaded = useRef(false);
 
   async function refreshMe() {
     const res = await fetch(`/api/games/${code}/me`, { cache: "no-store" });
@@ -61,6 +62,20 @@ export default function GameClient({
     refreshMe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.round?.phase, rt.round?.id, rt.game?.status]);
+
+  if (rt.game) {
+    gameEverLoaded.current = true;
+  }
+
+  // Game was deleted (host ended it) — redirect everyone to home
+  if (!rt.game && gameEverLoaded.current) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4">
+        <p className="font-serif italic text-parchment/60">A sala foi encerrada pelo host.</p>
+        <a href="/" className="btn-gold px-8 py-3 text-sm">Voltar ao Início</a>
+      </main>
+    );
+  }
 
   if (!rt.game) {
     return (
