@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   PublicPlayer,
   RoundRow,
@@ -652,7 +652,9 @@ function VoteBoard({
 }) {
   const [primaryPending, setPrimaryPending] = useState<string | null>(null);
   const [secondaryPending, setSecondaryPending] = useState<string | null>(null);
-  // Local locks so the button disables instantly after confirming, before realtime arrives
+  // Refs for synchronous lock — prevent double-tap before React re-renders
+  const primarySentRef = useRef(false);
+  const secondarySentRef = useRef(false);
   const [primarySent, setPrimarySent] = useState(false);
   const [secondarySent, setSecondarySent] = useState(false);
 
@@ -770,11 +772,13 @@ function VoteBoard({
       {canPrimary && primaryPending && (
         <button
           onClick={() => {
+            if (primarySentRef.current) return;
+            primarySentRef.current = true;
             setPrimarySent(true);
             onVote(primaryPending, false);
             setPrimaryPending(null);
           }}
-          disabled={busy}
+          disabled={busy || primarySent}
           className="btn-gold mt-5 w-full py-3.5 text-sm"
         >
           Confirmar Voto Principal
@@ -787,11 +791,13 @@ function VoteBoard({
           {secondaryPending ? (
             <button
               onClick={() => {
+                if (secondarySentRef.current) return;
+                secondarySentRef.current = true;
                 setSecondarySent(true);
                 onVote(secondaryPending, true);
                 setSecondaryPending(null);
               }}
-              disabled={busy}
+              disabled={busy || secondarySent}
               className="btn-wine w-full py-3 text-sm"
             >
               Confirmar Voto Secundário (+1 pt)

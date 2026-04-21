@@ -33,6 +33,7 @@ export default function GameClient({
 
   async function refreshMe() {
     const res = await fetch(`/api/games/${code}/me`, { cache: "no-store" });
+    if (res.status === 404) { window.location.href = "/"; return; }
     if (res.ok) setMe(await res.json());
   }
 
