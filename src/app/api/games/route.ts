@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   }
   if (!code) return NextResponse.json({ error: "code collision" }, { status: 500 });
 
-  const [game] = await db.insert(games).values({ code }).returning();
+  const [game] = await db.insert(games).values({ code, maxPlayers: 12 }).returning();
 
   const token = generatePlayerToken();
   const [player] = await db

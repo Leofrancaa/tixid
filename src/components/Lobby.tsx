@@ -67,7 +67,7 @@ export default function Lobby({
         <div className="panel mb-4 overflow-hidden">
           <div className="border-b border-dixit-gold/10 px-5 py-3">
             <p className="font-label text-xs uppercase tracking-widest text-parchment/40">
-              Jogadores na mesa — {players.length}/6
+              Jogadores na mesa — {players.length}/12
             </p>
           </div>
           <ul className="divide-y divide-white/5">

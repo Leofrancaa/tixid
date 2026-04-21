@@ -42,6 +42,21 @@ export default function GameClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Heartbeat — keeps presence alive and triggers cleanup when everyone leaves
+  useEffect(() => {
+    async function beat() {
+      const res = await fetch(`/api/games/${code}/heartbeat`, { method: "POST" }).catch(() => null);
+      if (res?.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.deleted) window.location.href = "/";
+      }
+    }
+    beat();
+    const iv = setInterval(beat, 30_000);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   useEffect(() => {
     refreshMe();
     // eslint-disable-next-line react-hooks/exhaustive-deps

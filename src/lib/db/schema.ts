@@ -31,7 +31,7 @@ export const games = pgTable("games", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   status: gameStatus("status").notNull().default("lobby"),
-  maxPlayers: integer("max_players").notNull().default(6),
+  maxPlayers: integer("max_players").notNull().default(12),
   targetScore: integer("target_score").notNull().default(30),
   hostPlayerId: uuid("host_player_id"),
   currentRoundId: uuid("current_round_id"),

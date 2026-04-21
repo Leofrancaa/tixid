@@ -149,7 +149,7 @@ export default function HomePage() {
         {/* Footer */}
         <div className="animate-fade-up-d3 mt-12 text-center">
           <p className="font-label text-xs tracking-widest text-parchment/20 uppercase">
-            2 – 6 jogadores
+            3 – 12 jogadores
           </p>
           <Link
             href="/admin"
