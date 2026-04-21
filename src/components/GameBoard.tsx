@@ -190,7 +190,11 @@ export default function GameBoard({
               onZoom={setZoomedUrl}
             />
           ) : round.phase === "clue" ? (
-            <Waiting text={`${storyteller?.nickname} está escolhendo a dica...`} />
+            <HandPreview
+              hand={hand}
+              storytellerName={storyteller?.nickname ?? ""}
+              onZoom={setZoomedUrl}
+            />
           ) : round.phase === "submitting" && !imStoryteller && !mySubmission ? (
             <Hand
               hand={hand}
@@ -269,7 +273,7 @@ function CardZoom({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-/* ─── Race Track ─────────────────────────────────────────────────────── */
+/* ─── Race Track (board game squares) ───────────────────────────────── */
 
 function RaceTrack({
   players,
@@ -280,60 +284,118 @@ function RaceTrack({
   myId: string;
   targetScore: number;
 }) {
+  // Map score → players on that square
+  const tokensAt: Record<number, { player: PublicPlayer; colorIdx: number }[]> = {};
+  players.forEach((p, i) => {
+    const sq = Math.min(p.score, targetScore);
+    if (!tokensAt[sq]) tokensAt[sq] = [];
+    tokensAt[sq].push({ player: p, colorIdx: i });
+  });
+
+  const squares = Array.from({ length: targetScore + 1 }, (_, i) => i);
+  const COLS = 10;
+  // Build rows in snake pattern (left→right, right→left alternating)
+  const rows: number[][] = [];
+  for (let r = 0; r * COLS < squares.length; r++) {
+    const chunk = squares.slice(r * COLS, (r + 1) * COLS);
+    rows.push(r % 2 === 1 ? [...chunk].reverse() : chunk);
+  }
+
   return (
     <div className="panel overflow-hidden">
       <div className="border-b border-dixit-gold/10 px-4 py-2.5 flex items-center justify-between">
         <span className="font-label text-xs uppercase tracking-widest text-parchment/30">
-          Placar
+          Tabuleiro
         </span>
-        <span className="font-label text-xs text-parchment/25">
-          Meta: {targetScore} pts
-        </span>
-      </div>
-      <div className="px-4 py-3 space-y-2.5">
-        {players.map((p, i) => {
-          const pct = Math.min((p.score / targetScore) * 100, 100);
-          const isMe = p.id === myId;
-          const color = TOKEN_COLORS[i % TOKEN_COLORS.length];
-          return (
-            <div key={p.id} className="flex items-center gap-3">
-              {/* Token */}
-              <div
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-label text-xs font-bold text-ink"
-                style={{ backgroundColor: color, opacity: isMe ? 1 : 0.7 }}
+        <div className="flex items-center gap-3">
+          {players.map((p, i) => (
+            <span key={p.id} className="flex items-center gap-1">
+              <span
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full font-label text-[9px] font-bold text-ink"
+                style={{ backgroundColor: TOKEN_COLORS[i % TOKEN_COLORS.length] }}
               >
                 {p.nickname[0].toUpperCase()}
-              </div>
-              {/* Name */}
-              <span
-                className={`w-16 shrink-0 truncate font-label text-xs sm:w-24 ${
-                  isMe ? "font-semibold text-dixit-gold" : "text-parchment/55"
-                }`}
-              >
-                {p.nickname}
               </span>
-              {/* Track */}
-              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-white/5">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
-                  style={{
-                    width: `${pct}%`,
-                    backgroundColor: color,
-                    opacity: isMe ? 0.9 : 0.5,
-                    boxShadow: isMe ? `0 0 8px ${color}55` : "none",
-                  }}
-                />
-              </div>
-              {/* Score */}
-              <span
-                className="w-8 shrink-0 text-right font-label text-xs font-semibold"
-                style={{ color: isMe ? color : "rgba(242,236,216,0.35)" }}
-              >
+              <span className={`font-label text-xs ${p.id === myId ? "text-dixit-gold font-semibold" : "text-parchment/40"}`}>
                 {p.score}
               </span>
+            </span>
+          ))}
+          <span className="font-label text-xs text-parchment/20">/{targetScore}</span>
+        </div>
+      </div>
+
+      <div className="p-2 sm:p-3 overflow-x-auto">
+        <div className="min-w-[280px] space-y-0.5">
+          {rows.map((row, rowIdx) => (
+            <div key={rowIdx} className="flex gap-0.5">
+              {row.map((sq) => {
+                const isMilestone = sq % 5 === 0;
+                const isFinish = sq === targetScore;
+                const tokens = tokensAt[sq] ?? [];
+                return (
+                  <div
+                    key={sq}
+                    className="relative flex flex-1 flex-col items-center justify-center rounded"
+                    style={{
+                      minWidth: 0,
+                      aspectRatio: "1",
+                      background: isFinish
+                        ? "rgba(201,168,76,0.2)"
+                        : isMilestone
+                        ? "rgba(201,168,76,0.08)"
+                        : "rgba(255,255,255,0.04)",
+                      border: isFinish
+                        ? "1px solid rgba(201,168,76,0.5)"
+                        : isMilestone
+                        ? "1px solid rgba(201,168,76,0.2)"
+                        : "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    {/* Square number */}
+                    <span
+                      className="font-label leading-none select-none"
+                      style={{
+                        fontSize: "clamp(7px, 1.2vw, 11px)",
+                        color: isFinish
+                          ? "rgba(201,168,76,0.9)"
+                          : isMilestone
+                          ? "rgba(201,168,76,0.5)"
+                          : "rgba(242,236,216,0.2)",
+                        marginBottom: tokens.length ? 1 : 0,
+                      }}
+                    >
+                      {isFinish ? "🏁" : sq}
+                    </span>
+
+                    {/* Player tokens */}
+                    {tokens.length > 0 && (
+                      <div className="flex flex-wrap justify-center gap-px">
+                        {tokens.map(({ player, colorIdx }) => (
+                          <div
+                            key={player.id}
+                            title={player.nickname}
+                            className="rounded-full transition-all duration-700"
+                            style={{
+                              width: "clamp(6px, 1.4vw, 11px)",
+                              height: "clamp(6px, 1.4vw, 11px)",
+                              backgroundColor: TOKEN_COLORS[colorIdx % TOKEN_COLORS.length],
+                              boxShadow:
+                                player.id === myId
+                                  ? `0 0 5px ${TOKEN_COLORS[colorIdx % TOKEN_COLORS.length]}`
+                                  : "none",
+                              opacity: player.id === myId ? 1 : 0.75,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -346,6 +408,35 @@ function Waiting({ text }: { text: string }) {
     <div className="panel flex min-h-28 items-center justify-center p-8">
       <p className="font-serif italic text-parchment/45 text-center">{text}</p>
     </div>
+  );
+}
+
+function HandPreview({
+  hand,
+  storytellerName,
+  onZoom,
+}: {
+  hand: HandCard[];
+  storytellerName: string;
+  onZoom: (url: string) => void;
+}) {
+  return (
+    <section>
+      <div className="panel mb-4 px-4 py-3 text-center">
+        <p className="font-serif italic text-parchment/45 text-sm">
+          <span className="text-dixit-gold">{storytellerName}</span> está escolhendo a dica — veja suas cartas enquanto aguarda
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-6">
+        {hand.map((c) => (
+          <CardButton
+            key={c.id}
+            imageUrl={c.imageUrl}
+            onZoom={onZoom}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -507,9 +598,20 @@ function VoteBoard({
   clue: string;
   onZoom: (url: string) => void;
 }) {
+  const [votePending, setVotePending] = useState<string | null>(null);
+
   const ordered = [...submissions].sort(
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
   );
+
+  const canSelect = !imStoryteller && !iVoted && !busy;
+
+  function handleConfirm() {
+    if (!votePending) return;
+    onVote(votePending);
+    setVotePending(null);
+  }
+
   return (
     <section>
       <div className="panel mb-5 px-5 py-3.5 text-center">
@@ -522,31 +624,67 @@ function VoteBoard({
             ? "Aguarde os votos"
             : iVoted
             ? "Voto registrado — aguarde os demais"
-            : "Vote na carta que você acha ser a do storyteller"}
+            : votePending
+            ? "Confirme seu voto abaixo ou escolha outra carta"
+            : "Toque numa carta para selecionar, depois confirme"}
         </p>
       </div>
+
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
         {ordered.map((s) => {
           const isOwn = s.id === mySubmission?.id;
-          const canVote = !imStoryteller && !iVoted && !busy && !isOwn;
+          const isSelected = s.id === votePending;
+
+          if (isOwn) {
+            return (
+              <div key={s.id} className="card-frame relative opacity-50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageMap[s.card_id] ?? ""}
+                  alt=""
+                  className="aspect-[3/4] w-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-end">
+                  <div className="w-full bg-ink/90 py-2 text-center font-label text-xs tracking-widest text-parchment/60 backdrop-blur-sm">
+                    sua carta
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onZoom(imageMap[s.card_id] ?? ""); }}
+                  className="absolute bottom-8 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-70 transition hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                >⛶</button>
+              </div>
+            );
+          }
+
           return (
             <CardButton
               key={s.id}
               imageUrl={imageMap[s.card_id] ?? ""}
-              onClick={canVote ? () => onVote(s.id) : undefined}
+              onClick={canSelect ? () => setVotePending(isSelected ? null : s.id) : undefined}
               onZoom={onZoom}
-              disabled={!canVote}
-              badge={
-                isOwn ? (
-                  <div className="absolute bottom-0 left-0 right-0 bg-dixit-purple/85 py-1.5 text-center font-label text-xs tracking-widest text-parchment/70 backdrop-blur-sm">
-                    sua carta
-                  </div>
-                ) : undefined
-              }
+              disabled={!canSelect}
+              selected={isSelected}
             />
           );
         })}
       </div>
+
+      {/* Confirm button — only shown when a card is selected and voting is allowed */}
+      {canSelect && votePending && (
+        <button
+          onClick={handleConfirm}
+          disabled={busy}
+          className="btn-gold mt-5 w-full py-3.5 text-sm"
+        >
+          Confirmar Voto
+        </button>
+      )}
+      {canSelect && !votePending && !iVoted && (
+        <div className="mt-4 rounded border border-parchment/10 py-3 text-center font-label text-xs tracking-wider text-parchment/25">
+          Nenhuma carta selecionada
+        </div>
+      )}
     </section>
   );
 }
