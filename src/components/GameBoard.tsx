@@ -325,76 +325,68 @@ function RaceTrack({
         </div>
       </div>
 
-      <div className="p-2 sm:p-3 overflow-x-auto">
-        <div className="min-w-[280px] space-y-0.5">
-          {rows.map((row, rowIdx) => (
-            <div key={rowIdx} className="flex gap-0.5">
-              {row.map((sq) => {
-                const isMilestone = sq % 5 === 0;
-                const isFinish = sq === targetScore;
-                const tokens = tokensAt[sq] ?? [];
-                return (
-                  <div
-                    key={sq}
-                    className="relative flex flex-1 flex-col items-center justify-center rounded"
-                    style={{
-                      minWidth: 0,
-                      aspectRatio: "1",
-                      background: isFinish
-                        ? "rgba(201,168,76,0.2)"
-                        : isMilestone
-                        ? "rgba(201,168,76,0.08)"
-                        : "rgba(255,255,255,0.04)",
-                      border: isFinish
-                        ? "1px solid rgba(201,168,76,0.5)"
-                        : isMilestone
-                        ? "1px solid rgba(201,168,76,0.2)"
-                        : "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    {/* Square number */}
-                    <span
-                      className="font-label leading-none select-none"
-                      style={{
-                        fontSize: "clamp(7px, 1.2vw, 11px)",
-                        color: isFinish
-                          ? "rgba(201,168,76,0.9)"
-                          : isMilestone
-                          ? "rgba(201,168,76,0.5)"
-                          : "rgba(242,236,216,0.2)",
-                        marginBottom: tokens.length ? 1 : 0,
-                      }}
-                    >
-                      {isFinish ? "🏁" : sq}
-                    </span>
+      <div className="p-2 sm:p-3">
+        <div
+          className="gap-0.5"
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
+          }}
+        >
+          {squares.map((sq) => {
+            const isFinish = sq === targetScore;
+            const tokens = tokensAt[sq] ?? [];
+            return (
+              <div
+                key={sq}
+                className="relative flex flex-col items-center justify-center rounded"
+                style={{
+                  aspectRatio: "1",
+                  background: isFinish || sq === 0
+                    ? "rgba(201,168,76,0.18)"
+                    : "rgba(255,255,255,0.04)",
+                  border: isFinish || sq === 0
+                    ? "1px solid rgba(201,168,76,0.45)"
+                    : "1px solid rgba(255,255,255,0.07)",
+                }}
+              >
+                <span
+                  className="font-label leading-none select-none"
+                  style={{
+                    fontSize: "clamp(7px, 1.1vw, 10px)",
+                    color: isFinish || sq === 0
+                      ? "rgba(201,168,76,0.9)"
+                      : "rgba(242,236,216,0.22)",
+                    marginBottom: tokens.length ? 1 : 0,
+                  }}
+                >
+                  {isFinish ? "🏁" : sq}
+                </span>
 
-                    {/* Player tokens */}
-                    {tokens.length > 0 && (
-                      <div className="flex flex-wrap justify-center gap-px">
-                        {tokens.map(({ player, colorIdx }) => (
-                          <div
-                            key={player.id}
-                            title={player.nickname}
-                            className="rounded-full transition-all duration-700"
-                            style={{
-                              width: "clamp(6px, 1.4vw, 11px)",
-                              height: "clamp(6px, 1.4vw, 11px)",
-                              backgroundColor: TOKEN_COLORS[colorIdx % TOKEN_COLORS.length],
-                              boxShadow:
-                                player.id === myId
-                                  ? `0 0 5px ${TOKEN_COLORS[colorIdx % TOKEN_COLORS.length]}`
-                                  : "none",
-                              opacity: player.id === myId ? 1 : 0.75,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
+                {tokens.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-px">
+                    {tokens.map(({ player, colorIdx }) => (
+                      <div
+                        key={player.id}
+                        title={player.nickname}
+                        className="rounded-full transition-all duration-700"
+                        style={{
+                          width: "clamp(5px, 1.3vw, 10px)",
+                          height: "clamp(5px, 1.3vw, 10px)",
+                          backgroundColor: TOKEN_COLORS[colorIdx % TOKEN_COLORS.length],
+                          boxShadow:
+                            player.id === myId
+                              ? `0 0 4px ${TOKEN_COLORS[colorIdx % TOKEN_COLORS.length]}`
+                              : "none",
+                          opacity: player.id === myId ? 1 : 0.75,
+                        }}
+                      />
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
