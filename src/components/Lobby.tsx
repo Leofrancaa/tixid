@@ -17,10 +17,15 @@ export default function Lobby({
   async function start() {
     setStarting(true);
     setErr(null);
-    const res = await fetch(`/api/games/${code}/start`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    setStarting(false);
-    if (!res.ok) setErr(data.error ?? "erro");
+    try {
+      const res = await fetch(`/api/games/${code}/start`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setErr(data.error ?? "erro");
+    } catch {
+      setErr("Erro de conexão. Tente novamente.");
+    } finally {
+      setStarting(false);
+    }
   }
 
   return (
