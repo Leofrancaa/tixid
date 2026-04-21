@@ -17,7 +17,7 @@ export default function AdminLoginPage() {
       options: {
         emailRedirectTo:
           typeof window !== "undefined"
-            ? `${window.location.origin}/admin`
+            ? `${window.location.origin}/auth/callback?next=/admin`
             : undefined,
       },
     });
