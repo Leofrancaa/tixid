@@ -28,7 +28,7 @@ export default function CardManager({ initialCards }: { initialCards: Card[] }) 
 
   function toDirectUrl(raw: string): string {
     const m = raw.match(/\/file\/d\/([^/?#]+)/);
-    if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
     return raw;
   }
 
