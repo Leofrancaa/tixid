@@ -45,6 +45,14 @@ export default function Lobby({
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-5 py-12">
+      {/* Error toast — fixed top so it's always visible */}
+      {err && (
+        <div className="fixed left-0 right-0 top-4 z-50 mx-auto flex max-w-sm items-start gap-3 rounded-xl border border-red-500/30 bg-red-950/95 px-4 py-3 shadow-2xl backdrop-blur">
+          <span className="mt-0.5 text-base">⚠️</span>
+          <p className="font-serif text-sm text-red-200">{err}</p>
+          <button onClick={() => setErr(null)} className="ml-auto shrink-0 text-red-400/60 hover:text-red-300">✕</button>
+        </div>
+      )}
       <div className="w-full max-w-md animate-fade-up">
 
         {/* Room code */}
@@ -130,11 +138,6 @@ export default function Lobby({
           </div>
         )}
 
-        {err && (
-          <p className="mt-3 rounded border border-red-500/20 bg-red-500/10 px-3 py-2 text-center font-serif text-sm text-red-300/80">
-            {err}
-          </p>
-        )}
       </div>
     </main>
   );

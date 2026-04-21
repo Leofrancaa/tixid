@@ -1,6 +1,6 @@
 // Minimal service worker — enables PWA installability
 const CACHE = "vonix-v1";
-const PRECACHE = ["/", "/favicon.svg", "/manifest.json"];
+const PRECACHE = ["/", "/favicon.svg", "/manifest.json", "/logo-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));

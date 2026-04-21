@@ -11,15 +11,18 @@ describe("computeScores", () => {
     "sub-B": "B",
     "sub-C": "C",
   };
+  const noSecondary = {};
+  const maxPointsPerRound = 5;
 
   it("all correct → storyteller 0, voters +2", () => {
-    const votes = { A: "sub-S", B: "sub-S", C: "sub-S" };
     const d = computeScores({
       storytellerId,
       submissionOwner,
       storytellerSubmissionId,
-      votes,
+      primaryVotes: { A: "sub-S", B: "sub-S", C: "sub-S" },
+      secondaryVotes: noSecondary,
       voterIds,
+      maxPointsPerRound,
     });
     expect(d.S).toBe(0);
     expect(d.A).toBe(2);
@@ -28,13 +31,14 @@ describe("computeScores", () => {
   });
 
   it("none correct → storyteller 0, voters +2", () => {
-    const votes = { A: "sub-B", B: "sub-C", C: "sub-A" };
     const d = computeScores({
       storytellerId,
       submissionOwner,
       storytellerSubmissionId,
-      votes,
+      primaryVotes: { A: "sub-B", B: "sub-C", C: "sub-A" },
+      secondaryVotes: noSecondary,
       voterIds,
+      maxPointsPerRound,
     });
     expect(d.S).toBe(0);
     expect(d.A).toBe(2);
@@ -44,17 +48,18 @@ describe("computeScores", () => {
 
   it("partial → storyteller +3, correct voters +3, bystander bonus", () => {
     // A correct, B voted sub-C, C voted sub-C
-    const votes = { A: "sub-S", B: "sub-C", C: "sub-C" };
     const d = computeScores({
       storytellerId,
       submissionOwner,
       storytellerSubmissionId,
-      votes,
+      primaryVotes: { A: "sub-S", B: "sub-C", C: "sub-C" },
+      secondaryVotes: noSecondary,
       voterIds,
+      maxPointsPerRound,
     });
     expect(d.S).toBe(3);
     expect(d.A).toBe(3);
     expect(d.B).toBe(0);
-    expect(d.C).toBe(2); // received 2 votes on own card
+    expect(d.C).toBe(2); // received 2 votes → capped at 2 (under maxPointsPerRound)
   });
 });
