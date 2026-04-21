@@ -42,7 +42,6 @@ export default function GameClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // refresh hand when phase changes
   useEffect(() => {
     refreshMe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -50,16 +49,26 @@ export default function GameClient({
 
   if (!rt.game) {
     return (
-      <main className="p-10">Carregando sala {code}...</main>
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="font-serif italic text-parchment/40">Carregando sala {code}...</p>
+      </main>
     );
   }
 
-  if (rt.game.status === "lobby") {
+  // Use realtime status when available; fall back to me.game.status so the
+  // transition to GameBoard doesn't depend solely on realtime firing.
+  const effectiveStatus =
+    rt.game.status !== "lobby"
+      ? rt.game.status
+      : (me?.game.status ?? "lobby");
+
+  if (effectiveStatus === "lobby") {
     return (
       <Lobby
         code={code}
         players={rt.players}
         isHost={isHost}
+        onStarted={refreshMe}
       />
     );
   }
@@ -74,7 +83,7 @@ export default function GameClient({
       submissions={rt.submissions}
       votes={rt.votes}
       hand={me?.hand ?? []}
-      gameStatus={rt.game.status}
+      gameStatus={effectiveStatus}
       targetScore={rt.game.target_score ?? 30}
     />
   );

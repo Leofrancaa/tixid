@@ -67,21 +67,21 @@ export default function HomeForms() {
       <div className="ornament py-1">ou entre em uma sala</div>
 
       {/* Join row */}
-      <div className="flex gap-2">
+      <div className="space-y-2">
         <input
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === "Enter" && join()}
-          placeholder="CÓDIGO"
+          placeholder="CÓDIGO DA SALA"
           maxLength={6}
-          className="field flex-none w-36 text-center font-label tracking-[0.3em] text-lg font-semibold"
+          className="field text-center font-label tracking-[0.35em] text-xl font-semibold"
         />
         <button
           onClick={join}
           disabled={pending}
-          className="btn-wine flex-1 text-sm"
+          className="btn-wine w-full py-3.5 text-sm"
         >
-          Entrar
+          Entrar na Sala
         </button>
       </div>
 

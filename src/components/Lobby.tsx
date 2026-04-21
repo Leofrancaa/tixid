@@ -6,10 +6,12 @@ export default function Lobby({
   code,
   players,
   isHost,
+  onStarted,
 }: {
   code: string;
   players: PublicPlayer[];
   isHost: boolean;
+  onStarted?: () => void;
 }) {
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -26,7 +28,12 @@ export default function Lobby({
     try {
       const res = await fetch(`/api/games/${code}/start`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setErr(data.error ?? "erro");
+      if (!res.ok) {
+        setErr(data.error ?? "Erro ao iniciar. Tente novamente.");
+      } else {
+        // Trigger immediate refresh so transition doesn't depend only on realtime
+        onStarted?.();
+      }
     } catch {
       setErr("Erro de conexão. Tente novamente.");
     } finally {
