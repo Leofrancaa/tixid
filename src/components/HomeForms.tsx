@@ -42,43 +42,55 @@ export default function HomeForms() {
   }
 
   return (
-    <div className="w-full max-w-md space-y-6">
-      <input
-        value={nickname}
-        onChange={(e) => setNickname(e.target.value)}
-        placeholder="Seu apelido"
-        maxLength={20}
-        className="w-full rounded border border-parchment/30 bg-ink/60 px-4 py-3 text-lg"
-      />
+    <div className="space-y-3">
+      {/* Nickname field */}
+      <div>
+        <label className="mb-1.5 block font-label text-xs uppercase tracking-widest text-parchment/40">
+          Seu apelido
+        </label>
+        <input
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+          placeholder="Como te chamam?"
+          maxLength={20}
+          className="field"
+        />
+      </div>
 
-      <button
-        onClick={create}
-        disabled={pending}
-        className="w-full rounded bg-dixit-gold px-4 py-3 text-lg text-ink disabled:opacity-50"
-      >
-        Criar nova sala
+      {/* Create button */}
+      <button onClick={create} disabled={pending} className="btn-gold w-full py-3.5 text-sm">
+        {pending ? "Aguarde..." : "Criar Nova Sala"}
       </button>
 
-      <div className="text-center text-sm opacity-60">ou</div>
+      {/* Divider */}
+      <div className="ornament py-1">ou entre em uma sala</div>
 
+      {/* Join row */}
       <div className="flex gap-2">
         <input
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === "Enter" && join()}
           placeholder="CÓDIGO"
           maxLength={6}
-          className="flex-1 rounded border border-parchment/30 bg-ink/60 px-4 py-3 text-center text-lg tracking-widest"
+          className="field flex-none w-36 text-center font-label tracking-[0.3em] text-lg font-semibold"
         />
         <button
           onClick={join}
           disabled={pending}
-          className="rounded bg-dixit-rose px-4 py-3 text-lg disabled:opacity-50"
+          className="btn-wine flex-1 text-sm"
         >
           Entrar
         </button>
       </div>
 
-      {msg && <p className="text-sm text-red-400">{msg}</p>}
+      {/* Error */}
+      {msg && (
+        <p className="rounded border border-red-500/20 bg-red-500/10 px-3 py-2 font-serif text-sm text-red-300/80">
+          {msg}
+        </p>
+      )}
     </div>
   );
 }

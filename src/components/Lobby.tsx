@@ -34,57 +34,101 @@ export default function Lobby({
     }
   }
 
+  const canStart = players.length >= 3;
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <header className="mb-8 text-center">
-        <p className="text-sm opacity-60">Código da sala</p>
-        <h1 className="text-5xl tracking-widest text-dixit-gold">{code}</h1>
-        <p className="mt-2 text-sm opacity-60">
-          Compartilhe este código com seus amigos
-        </p>
-      </header>
+    <main className="flex min-h-screen flex-col items-center justify-center px-5 py-12">
+      <div className="w-full max-w-md animate-fade-up">
 
-      <section className="mb-6">
-        <h2 className="mb-3 text-xl">Jogadores ({players.length}/6)</h2>
-        <ul className="space-y-2">
-          {players.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between rounded border border-parchment/20 px-4 py-3"
-            >
-              <span>{p.nickname}</span>
-              <span className="text-xs opacity-60">
-                {p.connected ? "online" : "off"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {isHost ? (
-        <div className="space-y-3">
-          <button
-            onClick={start}
-            disabled={starting || players.length < 3}
-            className="w-full rounded bg-dixit-gold px-4 py-3 text-lg text-ink disabled:opacity-50"
+        {/* Room code */}
+        <div className="panel mb-6 p-6 text-center">
+          <p className="mb-1 font-label text-xs uppercase tracking-[0.25em] text-parchment/35">
+            Código da sala
+          </p>
+          <div
+            className="my-2 font-display text-5xl font-semibold tracking-[0.3em] text-dixit-gold"
+            style={{ textShadow: "0 0 30px rgba(201,168,76,0.25)" }}
           >
-            {players.length < 3
-              ? "Aguardando mín. 3 jogadores"
-              : starting
-              ? "Iniciando..."
-              : "Iniciar jogo"}
-          </button>
-          <button
-            onClick={closeRoom}
-            className="w-full rounded border border-red-500/50 py-2 text-sm text-red-400 hover:bg-red-500/10"
-          >
-            Encerrar sala
-          </button>
+            {code}
+          </div>
+          <p className="font-label text-xs tracking-wider text-parchment/30">
+            Compartilhe com seus amigos
+          </p>
         </div>
-      ) : (
-        <p className="text-center opacity-70">Aguardando o host iniciar...</p>
-      )}
-      {err && <p className="mt-4 text-center text-sm text-red-400">{err}</p>}
+
+        {/* Players */}
+        <div className="panel mb-4 overflow-hidden">
+          <div className="border-b border-dixit-gold/10 px-5 py-3">
+            <p className="font-label text-xs uppercase tracking-widest text-parchment/40">
+              Jogadores na mesa — {players.length}/6
+            </p>
+          </div>
+          <ul className="divide-y divide-white/5">
+            {players.length === 0 ? (
+              <li className="px-5 py-4 font-serif text-sm italic text-parchment/30">
+                Aguardando jogadores...
+              </li>
+            ) : (
+              players.map((p, i) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-4 px-5 py-3.5 transition-colors"
+                  style={{ animationDelay: `${i * 0.06}s` }}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-dixit-gold/15 font-label text-xs font-semibold text-dixit-gold">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 font-serif text-sm text-parchment/90">
+                    {p.nickname}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        p.connected ? "bg-emerald-400" : "bg-parchment/20"
+                      }`}
+                    />
+                    <span className="font-label text-xs text-parchment/25">
+                      {p.connected ? "online" : "off"}
+                    </span>
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+
+        {/* Actions */}
+        {isHost ? (
+          <div className="space-y-2.5">
+            <button
+              onClick={start}
+              disabled={starting || !canStart}
+              className="btn-gold w-full py-3.5 text-sm"
+            >
+              {!canStart
+                ? `Aguardando mín. 3 jogadores (${players.length}/3)`
+                : starting
+                ? "Iniciando partida..."
+                : "Iniciar Partida"}
+            </button>
+            <button onClick={closeRoom} className="btn-ghost w-full text-xs">
+              Encerrar sala
+            </button>
+          </div>
+        ) : (
+          <div className="panel p-4 text-center">
+            <p className="font-serif text-sm italic text-parchment/50">
+              Aguardando o host iniciar a partida...
+            </p>
+          </div>
+        )}
+
+        {err && (
+          <p className="mt-3 rounded border border-red-500/20 bg-red-500/10 px-3 py-2 text-center font-serif text-sm text-red-300/80">
+            {err}
+          </p>
+        )}
+      </div>
     </main>
   );
 }

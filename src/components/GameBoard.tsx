@@ -13,14 +13,7 @@ interface HandCard {
   imageUrl: string;
 }
 
-const TRACK_COLORS = [
-  "#C4A862",
-  "#9B59B6",
-  "#E74C3C",
-  "#3498DB",
-  "#2ECC71",
-  "#E67E22",
-];
+const TOKEN_COLORS = ["#C9A84C", "#9B72CF", "#C8536D", "#4A9ECC", "#5BAD72", "#D4834A"];
 
 export default function GameBoard({
   code,
@@ -74,7 +67,13 @@ export default function GameBoard({
       });
   }, [submissions, imageMap]);
 
-  if (!round) return <main className="p-10">Carregando rodada...</main>;
+  if (!round) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="font-serif italic text-parchment/40">Carregando rodada...</p>
+      </main>
+    );
+  }
 
   const storyteller = players.find((p) => p.id === round.storyteller_id);
   const imStoryteller = round.storyteller_id === myPlayerId;
@@ -82,9 +81,8 @@ export default function GameBoard({
   const iVoted = votes.some((v) => v.voter_id === myPlayerId);
 
   async function doClue() {
-    if (!clue.trim() || !selectedCard) return setErr("Escreva dica e escolha carta");
-    setBusy(true);
-    setErr(null);
+    if (!clue.trim() || !selectedCard) return setErr("Escreva a dica e escolha uma carta");
+    setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/clue`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -97,8 +95,7 @@ export default function GameBoard({
 
   async function doSubmit() {
     if (!selectedCard) return setErr("Escolha uma carta");
-    setBusy(true);
-    setErr(null);
+    setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/submit`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -110,8 +107,7 @@ export default function GameBoard({
   }
 
   async function doVote(submissionId: string) {
-    setBusy(true);
-    setErr(null);
+    setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/vote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -127,126 +123,153 @@ export default function GameBoard({
     setBusy(false);
   }
 
+  const phaseLabel: Record<string, string> = {
+    clue: "Fase da Dica",
+    submitting: "Escolha de Cartas",
+    voting: "Votação",
+    reveal: "Revelação",
+    finished: "Fim de Jogo",
+  };
+
   return (
     <>
-      {zoomedUrl && (
-        <CardZoom url={zoomedUrl} onClose={() => setZoomedUrl(null)} />
-      )}
+      {zoomedUrl && <CardZoom url={zoomedUrl} onClose={() => setZoomedUrl(null)} />}
 
-      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        {/* Header */}
-        <header className="mb-4">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <p className="text-xs opacity-60">
-                Sala {code} · Rodada {round.round_number}
-              </p>
-              <p className="text-sm">
-                Storyteller:{" "}
-                <span className="text-dixit-gold">{storyteller?.nickname}</span>
-                {round.clue && (
-                  <>
-                    {" · "}
-                    <span className="italic text-dixit-rose">"{round.clue}"</span>
-                  </>
-                )}
-              </p>
-            </div>
+      <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
+        {/* Top bar */}
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <span className="font-display text-lg font-semibold tracking-widest text-dixit-gold">
+              TIXID
+            </span>
+            <span className="hidden h-4 w-px bg-dixit-gold/20 sm:block" />
+            <span className="font-label text-xs tracking-widest text-parchment/30 uppercase">
+              Sala {code}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="phase-badge">{phaseLabel[round.phase] ?? round.phase}</span>
+            <span className="font-label text-xs text-parchment/30">R{round.round_number}</span>
           </div>
         </header>
+
+        {/* Storyteller info */}
+        <div className="panel mb-4 flex items-center gap-4 px-4 py-3">
+          <div className="flex-1 min-w-0">
+            <p className="font-label text-xs uppercase tracking-widest text-parchment/35 mb-0.5">
+              Storyteller
+            </p>
+            <p className="font-serif text-sm text-parchment/90 truncate">
+              <span className="text-dixit-gold font-semibold">{storyteller?.nickname}</span>
+              {round.clue && (
+                <>
+                  <span className="mx-2 text-parchment/20">·</span>
+                  <span className="italic text-parchment/70">"{round.clue}"</span>
+                </>
+              )}
+            </p>
+          </div>
+        </div>
 
         {/* Race Track */}
         <RaceTrack players={players} myId={myPlayerId} targetScore={targetScore} />
 
         {/* Game Content */}
-        {gameStatus === "finished" ? (
-          <EndScreen players={players} code={code} isHost={isHost} />
-        ) : round.phase === "clue" && imStoryteller ? (
-          <ClueInput
-            clue={clue}
-            setClue={setClue}
-            hand={hand}
-            selected={selectedCard}
-            setSelected={setSelectedCard}
-            onSubmit={doClue}
-            busy={busy}
-            onZoom={setZoomedUrl}
-          />
-        ) : round.phase === "clue" ? (
-          <Waiting text={`${storyteller?.nickname} está escolhendo a dica...`} />
-        ) : round.phase === "submitting" && !imStoryteller && !mySubmission ? (
-          <Hand
-            hand={hand}
-            selected={selectedCard}
-            setSelected={setSelectedCard}
-            onConfirm={doSubmit}
-            busy={busy}
-            hint={`Dica: "${round.clue}" — escolha a melhor carta da sua mão`}
-            buttonLabel="Enviar carta"
-            onZoom={setZoomedUrl}
-          />
-        ) : round.phase === "submitting" ? (
-          <Waiting
-            text={`Aguardando submissões (${submissions.length - 1}/${players.length - 1})`}
-          />
-        ) : round.phase === "voting" ? (
-          <VoteBoard
-            submissions={submissions}
-            imageMap={imageMap}
-            mySubmission={mySubmission}
-            onVote={doVote}
-            iVoted={iVoted}
-            imStoryteller={imStoryteller}
-            busy={busy}
-            clue={round.clue ?? ""}
-            onZoom={setZoomedUrl}
-          />
-        ) : round.phase === "reveal" ? (
-          <Reveal
-            submissions={submissions}
-            votes={votes}
-            players={players}
-            storytellerCardId={round.storyteller_card_id}
-            imageMap={imageMap}
-            isHost={isHost}
-            onNext={doNext}
-            busy={busy}
-            onZoom={setZoomedUrl}
-          />
-        ) : null}
+        <div className="mt-5">
+          {gameStatus === "finished" ? (
+            <EndScreen players={players} code={code} isHost={isHost} />
+          ) : round.phase === "clue" && imStoryteller ? (
+            <ClueInput
+              clue={clue}
+              setClue={setClue}
+              hand={hand}
+              selected={selectedCard}
+              setSelected={setSelectedCard}
+              onSubmit={doClue}
+              busy={busy}
+              onZoom={setZoomedUrl}
+            />
+          ) : round.phase === "clue" ? (
+            <Waiting text={`${storyteller?.nickname} está escolhendo a dica...`} />
+          ) : round.phase === "submitting" && !imStoryteller && !mySubmission ? (
+            <Hand
+              hand={hand}
+              selected={selectedCard}
+              setSelected={setSelectedCard}
+              onConfirm={doSubmit}
+              busy={busy}
+              hint={`Dica: "${round.clue}" — escolha a carta que melhor combina`}
+              buttonLabel="Enviar Carta"
+              onZoom={setZoomedUrl}
+            />
+          ) : round.phase === "submitting" ? (
+            <Waiting
+              text={`Aguardando submissões — ${submissions.length - 1} de ${players.length - 1}`}
+            />
+          ) : round.phase === "voting" ? (
+            <VoteBoard
+              submissions={submissions}
+              imageMap={imageMap}
+              mySubmission={mySubmission}
+              onVote={doVote}
+              iVoted={iVoted}
+              imStoryteller={imStoryteller}
+              busy={busy}
+              clue={round.clue ?? ""}
+              onZoom={setZoomedUrl}
+            />
+          ) : round.phase === "reveal" ? (
+            <Reveal
+              submissions={submissions}
+              votes={votes}
+              players={players}
+              storytellerCardId={round.storyteller_card_id}
+              imageMap={imageMap}
+              isHost={isHost}
+              onNext={doNext}
+              busy={busy}
+              onZoom={setZoomedUrl}
+            />
+          ) : null}
+        </div>
 
         {err && (
-          <p className="fixed bottom-4 right-4 rounded bg-red-600/90 px-4 py-2 text-sm">
+          <div className="fixed bottom-5 right-5 z-50 rounded-lg border border-red-500/30 bg-red-950/90 px-4 py-3 font-serif text-sm text-red-200 shadow-2xl backdrop-blur">
             {err}
-          </p>
+          </div>
         )}
       </main>
     </>
   );
 }
 
+/* ─── Card Zoom Overlay ──────────────────────────────────────────────── */
+
 function CardZoom({ url, onClose }: { url: string; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
         alt=""
-        className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+        className="max-h-[88vh] max-w-[88vw] rounded-xl object-contain shadow-2xl"
+        style={{ boxShadow: "0 0 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(201,168,76,0.15)" }}
         onClick={(e) => e.stopPropagation()}
       />
       <button
         onClick={onClose}
-        className="absolute right-4 top-4 rounded-full bg-black/60 px-3 py-1 text-sm text-white"
+        className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 font-label text-sm text-white/70 transition hover:bg-white/20"
       >
         ✕
       </button>
     </div>
   );
 }
+
+/* ─── Race Track ─────────────────────────────────────────────────────── */
 
 function RaceTrack({
   players,
@@ -258,42 +281,56 @@ function RaceTrack({
   targetScore: number;
 }) {
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-parchment/20 bg-gradient-to-b from-ink/70 to-ink/30 p-3 sm:p-4">
-      <div className="mb-2 flex items-center justify-between text-xs opacity-40">
-        <span>0</span>
-        <span>🏁 meta: {targetScore} pts</span>
+    <div className="panel overflow-hidden">
+      <div className="border-b border-dixit-gold/10 px-4 py-2.5 flex items-center justify-between">
+        <span className="font-label text-xs uppercase tracking-widest text-parchment/30">
+          Placar
+        </span>
+        <span className="font-label text-xs text-parchment/25">
+          Meta: {targetScore} pts
+        </span>
       </div>
-      <div className="space-y-2">
+      <div className="px-4 py-3 space-y-2.5">
         {players.map((p, i) => {
           const pct = Math.min((p.score / targetScore) * 100, 100);
           const isMe = p.id === myId;
-          const color = TRACK_COLORS[i % TRACK_COLORS.length];
+          const color = TOKEN_COLORS[i % TOKEN_COLORS.length];
           return (
-            <div key={p.id} className="flex items-center gap-2">
+            <div key={p.id} className="flex items-center gap-3">
+              {/* Token */}
+              <div
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-label text-xs font-bold text-ink"
+                style={{ backgroundColor: color, opacity: isMe ? 1 : 0.7 }}
+              >
+                {p.nickname[0].toUpperCase()}
+              </div>
+              {/* Name */}
               <span
-                className={`w-14 shrink-0 truncate text-xs sm:w-20 ${
-                  isMe ? "font-bold text-dixit-gold" : "opacity-70"
+                className={`w-16 shrink-0 truncate font-label text-xs sm:w-24 ${
+                  isMe ? "font-semibold text-dixit-gold" : "text-parchment/55"
                 }`}
               >
                 {p.nickname}
               </span>
-              <div className="relative h-5 flex-1 overflow-hidden rounded-full bg-white/10">
-                {/* Track dividers */}
-                <div className="pointer-events-none absolute inset-0 flex">
-                  {Array.from({ length: 4 }).map((_, j) => (
-                    <div key={j} className="flex-1 border-r border-white/5 last:border-0" />
-                  ))}
-                </div>
-                {/* Progress bar */}
+              {/* Track */}
+              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-white/5">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
-                  style={{ width: `${pct}%`, backgroundColor: color, opacity: isMe ? 1 : 0.65 }}
+                  className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000"
+                  style={{
+                    width: `${pct}%`,
+                    backgroundColor: color,
+                    opacity: isMe ? 0.9 : 0.5,
+                    boxShadow: isMe ? `0 0 8px ${color}55` : "none",
+                  }}
                 />
-                {/* Score */}
-                <span className="absolute inset-0 flex items-center justify-end pr-2 text-xs font-bold drop-shadow">
-                  {p.score}
-                </span>
               </div>
+              {/* Score */}
+              <span
+                className="w-8 shrink-0 text-right font-label text-xs font-semibold"
+                style={{ color: isMe ? color : "rgba(242,236,216,0.35)" }}
+              >
+                {p.score}
+              </span>
             </div>
           );
         })}
@@ -302,13 +339,17 @@ function RaceTrack({
   );
 }
 
+/* ─── Waiting ────────────────────────────────────────────────────────── */
+
 function Waiting({ text }: { text: string }) {
   return (
-    <div className="rounded border border-parchment/20 p-8 text-center opacity-80 sm:p-10">
-      {text}
+    <div className="panel flex min-h-28 items-center justify-center p-8">
+      <p className="font-serif italic text-parchment/45 text-center">{text}</p>
     </div>
   );
 }
+
+/* ─── Card Button ────────────────────────────────────────────────────── */
 
 function CardButton({
   imageUrl,
@@ -326,33 +367,37 @@ function CardButton({
   disabled?: boolean;
 }) {
   return (
-    <div className="group relative">
+    <div className={`card-frame group ${selected ? "selected" : ""}`}>
       <button
         onClick={onClick}
-        disabled={disabled}
-        className={`w-full overflow-hidden rounded border-2 transition ${
-          selected
-            ? "scale-105 border-dixit-gold"
-            : disabled
-            ? "cursor-not-allowed border-transparent opacity-60"
-            : "border-transparent opacity-90 hover:opacity-100 hover:border-dixit-gold/50"
-        }`}
+        disabled={disabled && !onClick}
+        className={`relative w-full transition-transform duration-200 ${
+          selected ? "scale-[1.04]" : ""
+        } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+        style={{ display: "block" }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imageUrl} alt="" className="aspect-[3/4] w-full object-cover" />
+        <img
+          src={imageUrl}
+          alt=""
+          className="aspect-[3/4] w-full object-cover"
+          style={{ display: "block" }}
+        />
         {badge}
       </button>
       {/* Zoom button */}
       <button
         onClick={(e) => { e.stopPropagation(); onZoom(imageUrl); }}
-        className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white opacity-70 transition hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-        title="Ampliar"
+        className="absolute bottom-1.5 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-80 transition hover:bg-black/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
+        title="Ampliar carta"
       >
         ⛶
       </button>
     </div>
   );
 }
+
+/* ─── Hand ───────────────────────────────────────────────────────────── */
 
 function Hand({
   hand,
@@ -375,7 +420,9 @@ function Hand({
 }) {
   return (
     <section>
-      {hint && <p className="mb-3 text-center text-sm opacity-80">{hint}</p>}
+      {hint && (
+        <p className="mb-4 text-center font-serif text-sm italic text-parchment/55">{hint}</p>
+      )}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-6">
         {hand.map((c) => (
           <CardButton
@@ -390,13 +437,15 @@ function Hand({
       <button
         onClick={onConfirm}
         disabled={!selected || busy}
-        className="mt-4 w-full rounded bg-dixit-gold py-3 text-ink disabled:opacity-50"
+        className="btn-gold mt-5 w-full py-3.5 text-sm"
       >
         {buttonLabel}
       </button>
     </section>
   );
 }
+
+/* ─── Clue Input ─────────────────────────────────────────────────────── */
 
 function ClueInput(props: {
   clue: string;
@@ -410,15 +459,16 @@ function ClueInput(props: {
 }) {
   return (
     <section>
-      <p className="mb-3 text-center text-sm opacity-80">
-        Você é o storyteller. Escolha uma carta e dê uma dica.
+      <p className="mb-4 text-center font-serif text-sm italic text-parchment/55">
+        Você é o storyteller — escolha uma carta e dê uma dica.
       </p>
       <input
         value={props.clue}
         onChange={(e) => props.setClue(e.target.value)}
-        placeholder="Sua dica (frase, palavra, etc.)"
+        onKeyDown={(e) => e.key === "Enter" && props.onSubmit()}
+        placeholder="Sua dica — uma palavra, frase, som, emoção..."
         maxLength={100}
-        className="mb-4 w-full rounded border border-parchment/30 bg-ink/60 px-4 py-3"
+        className="field mb-4"
       />
       <Hand
         hand={props.hand}
@@ -427,12 +477,14 @@ function ClueInput(props: {
         onConfirm={props.onSubmit}
         busy={props.busy}
         hint=""
-        buttonLabel="Enviar dica + carta"
+        buttonLabel="Enviar Dica + Carta"
         onZoom={props.onZoom}
       />
     </section>
   );
 }
+
+/* ─── Vote Board ─────────────────────────────────────────────────────── */
 
 function VoteBoard({
   submissions,
@@ -460,28 +512,35 @@ function VoteBoard({
   );
   return (
     <section>
-      <p className="mb-3 text-center text-sm opacity-80">
-        Dica: <span className="italic text-dixit-rose">"{clue}"</span>
-        {imStoryteller
-          ? " — aguarde os votos."
-          : iVoted
-          ? " — voto registrado, aguarde os demais."
-          : " — vote na carta que você acha ser a do storyteller."}
-      </p>
+      <div className="panel mb-5 px-5 py-3.5 text-center">
+        <p className="font-label text-xs uppercase tracking-widest text-parchment/30 mb-1">
+          Dica do storyteller
+        </p>
+        <p className="font-serif text-lg italic text-parchment/85">"{clue}"</p>
+        <p className="mt-1.5 font-label text-xs text-parchment/35">
+          {imStoryteller
+            ? "Aguarde os votos"
+            : iVoted
+            ? "Voto registrado — aguarde os demais"
+            : "Vote na carta que você acha ser a do storyteller"}
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
         {ordered.map((s) => {
           const isOwn = s.id === mySubmission?.id;
-          const disabled = imStoryteller || iVoted || busy || isOwn;
+          const canVote = !imStoryteller && !iVoted && !busy && !isOwn;
           return (
             <CardButton
               key={s.id}
               imageUrl={imageMap[s.card_id] ?? ""}
-              onClick={disabled ? undefined : () => onVote(s.id)}
+              onClick={canVote ? () => onVote(s.id) : undefined}
               onZoom={onZoom}
-              disabled={disabled}
+              disabled={!canVote}
               badge={
                 isOwn ? (
-                  <span className="block bg-dixit-purple/70 py-1 text-xs">sua carta</span>
+                  <div className="absolute bottom-0 left-0 right-0 bg-dixit-purple/85 py-1.5 text-center font-label text-xs tracking-widest text-parchment/70 backdrop-blur-sm">
+                    sua carta
+                  </div>
                 ) : undefined
               }
             />
@@ -491,6 +550,8 @@ function VoteBoard({
     </section>
   );
 }
+
+/* ─── Reveal ─────────────────────────────────────────────────────────── */
 
 function Reveal({
   submissions,
@@ -525,7 +586,9 @@ function Reveal({
   );
   return (
     <section>
-      <p className="mb-4 text-center text-sm opacity-80">Resultado da rodada</p>
+      <p className="mb-4 text-center font-serif text-sm italic text-parchment/45">
+        Resultado da rodada
+      </p>
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
         {ordered.map((s) => {
           const isStory = s.card_id === storytellerCardId;
@@ -533,9 +596,11 @@ function Reveal({
           return (
             <div
               key={s.id}
-              className={`overflow-hidden rounded border-2 ${
-                isStory ? "border-dixit-gold" : "border-parchment/20"
-              }`}
+              className="card-frame overflow-hidden"
+              style={{
+                borderColor: isStory ? "rgba(201,168,76,0.7)" : undefined,
+                boxShadow: isStory ? "0 0 20px rgba(201,168,76,0.2)" : undefined,
+              }}
             >
               <div className="group relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -544,23 +609,29 @@ function Reveal({
                   alt=""
                   className="aspect-[3/4] w-full object-cover"
                 />
+                {isStory && (
+                  <div className="absolute left-2 top-2 rounded bg-dixit-gold/90 px-1.5 py-0.5 font-label text-xs font-bold text-ink">
+                    ⭐ Storyteller
+                  </div>
+                )}
                 <button
                   onClick={() => onZoom(imageMap[s.card_id] ?? "")}
-                  className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white opacity-70 transition hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  className="absolute bottom-1.5 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-80 transition hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   ⛶
                 </button>
               </div>
-              <div className="bg-ink/80 p-2 text-xs">
-                <p>
-                  {isStory && "⭐ "}
+              <div className="bg-table-felt/90 p-2.5">
+                <p className="font-label text-xs font-semibold text-parchment/75">
                   {owner?.nickname}
                 </p>
                 {votesFor[s.id]?.length ? (
-                  <p className="opacity-70">
-                    votos: {votesFor[s.id].map((p) => p.nickname).join(", ")}
+                  <p className="mt-0.5 font-label text-xs text-parchment/40 leading-tight">
+                    {votesFor[s.id].map((p) => p.nickname).join(", ")}
                   </p>
-                ) : null}
+                ) : (
+                  <p className="mt-0.5 font-label text-xs text-parchment/20">sem votos</p>
+                )}
               </div>
             </div>
           );
@@ -570,14 +641,16 @@ function Reveal({
         <button
           onClick={onNext}
           disabled={busy}
-          className="mt-6 w-full rounded bg-dixit-gold py-3 text-ink disabled:opacity-50"
+          className="btn-gold mt-6 w-full py-3.5 text-sm"
         >
-          Próxima rodada
+          Próxima Rodada
         </button>
       )}
     </section>
   );
 }
+
+/* ─── End Screen ─────────────────────────────────────────────────────── */
 
 function EndScreen({
   players,
@@ -597,37 +670,46 @@ function EndScreen({
   }
 
   return (
-    <section className="text-center">
-      <h2 className="text-3xl text-dixit-gold sm:text-4xl">
-        🏆 {winner?.nickname} venceu!
+    <section className="animate-fade-up text-center">
+      <div
+        className="mx-auto mb-2 inline-block font-display text-5xl text-dixit-gold sm:text-6xl"
+        style={{ textShadow: "0 0 40px rgba(201,168,76,0.4)" }}
+      >
+        🏆
+      </div>
+      <h2 className="mb-1 font-display text-2xl font-semibold tracking-widest text-dixit-gold sm:text-3xl">
+        {winner?.nickname} venceu!
       </h2>
-      <ul className="mx-auto mt-6 max-w-md space-y-2">
+      <p className="mb-8 font-serif italic text-parchment/40">A partida chegou ao fim</p>
+
+      <ul className="mx-auto mb-8 max-w-sm space-y-2">
         {sorted.map((p, i) => (
           <li
             key={p.id}
-            className="flex justify-between rounded border border-parchment/20 px-4 py-2"
+            className={`flex items-center justify-between rounded-lg px-4 py-3 ${
+              i === 0 ? "border border-dixit-gold/30 bg-dixit-gold/8" : "panel"
+            }`}
           >
-            <span>
-              {i + 1}. {p.nickname}
+            <span className="flex items-center gap-3">
+              <span className="font-label text-sm text-parchment/30">{i + 1}.</span>
+              <span className="font-serif text-parchment/85">{p.nickname}</span>
             </span>
-            <b>{p.score}</b>
+            <b className={`font-display text-lg ${i === 0 ? "text-dixit-gold" : "text-parchment/60"}`}>
+              {p.score}
+            </b>
           </li>
         ))}
       </ul>
-      <div className="mt-6 flex flex-col items-center gap-3">
-        {isHost ? (
-          <button
-            onClick={deleteGame}
-            className="rounded bg-dixit-rose px-6 py-2 text-white"
-          >
-            Encerrar e apagar partida
-          </button>
-        ) : (
-          <a href="/" className="rounded bg-dixit-rose px-6 py-2">
-            Voltar
-          </a>
-        )}
-      </div>
+
+      {isHost ? (
+        <button onClick={deleteGame} className="btn-wine px-8 py-3 text-sm">
+          Encerrar e Apagar Partida
+        </button>
+      ) : (
+        <a href="/" className="btn-ghost inline-block px-8 py-3 text-sm">
+          Voltar ao Início
+        </a>
+      )}
     </section>
   );
 }
