@@ -652,12 +652,15 @@ function VoteBoard({
 }) {
   const [primaryPending, setPrimaryPending] = useState<string | null>(null);
   const [secondaryPending, setSecondaryPending] = useState<string | null>(null);
+  // Local locks so the button disables instantly after confirming, before realtime arrives
+  const [primarySent, setPrimarySent] = useState(false);
+  const [secondarySent, setSecondarySent] = useState(false);
 
-  // My confirmed votes from the server
+  // My confirmed votes from the server (source of truth once realtime delivers)
   const myPrimaryVote = votes.find((v) => v.voter_id === myPlayerId && !v.is_secondary);
   const mySecondaryVote = votes.find((v) => v.voter_id === myPlayerId && v.is_secondary);
-  const hasPrimaryVote = !!myPrimaryVote;
-  const hasSecondaryVote = !!mySecondaryVote;
+  const hasPrimaryVote = !!myPrimaryVote || primarySent;
+  const hasSecondaryVote = !!mySecondaryVote || secondarySent;
   const hasOdysseyMode = playerCount >= 7;
 
   const ordered = [...submissions].sort(
@@ -665,8 +668,6 @@ function VoteBoard({
   );
 
   const canPrimary = !imStoryteller && !hasPrimaryVote && !busy;
-  // For secondary: must have primary vote, 7+ players, no secondary yet
-  // Also: the card selected for secondary must differ from the primary vote
   const canSecondary = !imStoryteller && hasPrimaryVote && hasOdysseyMode && !hasSecondaryVote && !busy;
 
   function statusText() {
@@ -768,7 +769,11 @@ function VoteBoard({
       {/* Primary vote confirm */}
       {canPrimary && primaryPending && (
         <button
-          onClick={() => { onVote(primaryPending, false); setPrimaryPending(null); }}
+          onClick={() => {
+            setPrimarySent(true);
+            onVote(primaryPending, false);
+            setPrimaryPending(null);
+          }}
           disabled={busy}
           className="btn-gold mt-5 w-full py-3.5 text-sm"
         >
@@ -781,7 +786,11 @@ function VoteBoard({
         <div className="mt-4 space-y-2">
           {secondaryPending ? (
             <button
-              onClick={() => { onVote(secondaryPending, true); setSecondaryPending(null); }}
+              onClick={() => {
+                setSecondarySent(true);
+                onVote(secondaryPending, true);
+                setSecondaryPending(null);
+              }}
               disabled={busy}
               className="btn-wine w-full py-3 text-sm"
             >
