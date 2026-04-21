@@ -100,7 +100,7 @@ export function useGameRealtime(gameId: string) {
         {
           event: "*",
           schema: "public",
-          table: "game_players_public",
+          table: "game_players",
           filter: `game_id=eq.${gameId}`,
         },
         () => {
