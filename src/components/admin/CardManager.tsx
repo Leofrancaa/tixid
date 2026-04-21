@@ -14,7 +14,7 @@ export default function CardManager({ initialCards }: { initialCards: Card[] }) 
     const res = await fetch("/api/admin/cards", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ urls: [url.trim()] }),
+      body: JSON.stringify({ urls: [toDirectUrl(url.trim())] }),
     });
     if (!res.ok) {
       setMsg(`Erro: ${res.status}`);
@@ -26,10 +26,16 @@ export default function CardManager({ initialCards }: { initialCards: Card[] }) 
     setMsg(`+${created.length} carta(s)`);
   }
 
+  function toDirectUrl(raw: string): string {
+    const m = raw.match(/\/file\/d\/([^/?#]+)/);
+    if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    return raw;
+  }
+
   async function addBulk() {
     const urls = bulk
-      .split("\n")
-      .map((s) => s.trim())
+      .split(/[\n,]+/)
+      .map((s) => toDirectUrl(s.trim()))
       .filter(Boolean);
     if (!urls.length) return;
     const res = await fetch("/api/admin/cards", {
