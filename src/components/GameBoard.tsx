@@ -139,8 +139,15 @@ export default function GameBoard({
         {/* Top bar */}
         <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <span className="font-display text-lg font-semibold tracking-widest text-dixit-gold">
-              TIXID
+            <span
+              className="text-dixit-gold"
+              style={{
+                fontFamily: "var(--font-vonix), var(--font-cinzel), serif",
+                fontSize: "1.2rem",
+                letterSpacing: "0.12em",
+              }}
+            >
+              Vonix
             </span>
             <span className="hidden h-4 w-px bg-dixit-gold/20 sm:block" />
             <span className="font-label text-xs tracking-widest text-parchment/30 uppercase">
@@ -292,14 +299,10 @@ function RaceTrack({
     tokensAt[sq].push({ player: p, colorIdx: i });
   });
 
-  const squares = Array.from({ length: targetScore + 1 }, (_, i) => i);
+  // Squares 0..targetScore-1 go in the grid; targetScore is rendered separately
+  const squares = Array.from({ length: targetScore }, (_, i) => i);
   const COLS = 10;
-  // Build rows in snake pattern (left→right, right→left alternating)
-  const rows: number[][] = [];
-  for (let r = 0; r * COLS < squares.length; r++) {
-    const chunk = squares.slice(r * COLS, (r + 1) * COLS);
-    rows.push(r % 2 === 1 ? [...chunk].reverse() : chunk);
-  }
+  const finishTokens = tokensAt[targetScore] ?? [];
 
   return (
     <div className="panel overflow-hidden">
@@ -325,7 +328,8 @@ function RaceTrack({
         </div>
       </div>
 
-      <div className="p-2 sm:p-3">
+      <div className="p-2 sm:p-3 space-y-0.5">
+        {/* Normal squares grid */}
         <div
           className="gap-0.5"
           style={{
@@ -334,7 +338,7 @@ function RaceTrack({
           }}
         >
           {squares.map((sq) => {
-            const isFinish = sq === targetScore;
+            const isFinish = false;
             const tokens = tokensAt[sq] ?? [];
             return (
               <div
@@ -342,10 +346,10 @@ function RaceTrack({
                 className="relative flex flex-col items-center justify-center rounded"
                 style={{
                   aspectRatio: "1",
-                  background: isFinish || sq === 0
+                  background: sq === 0
                     ? "rgba(201,168,76,0.18)"
                     : "rgba(255,255,255,0.04)",
-                  border: isFinish || sq === 0
+                  border: sq === 0
                     ? "1px solid rgba(201,168,76,0.45)"
                     : "1px solid rgba(255,255,255,0.07)",
                 }}
@@ -354,13 +358,13 @@ function RaceTrack({
                   className="font-label leading-none select-none"
                   style={{
                     fontSize: "clamp(7px, 1.1vw, 10px)",
-                    color: isFinish || sq === 0
+                    color: sq === 0
                       ? "rgba(201,168,76,0.9)"
                       : "rgba(242,236,216,0.22)",
                     marginBottom: tokens.length ? 1 : 0,
                   }}
                 >
-                  {isFinish ? "🏁" : sq}
+                  {sq}
                 </span>
 
                 {tokens.length > 0 && (
@@ -387,6 +391,41 @@ function RaceTrack({
               </div>
             );
           })}
+        </div>
+
+        {/* Full-width finish square */}
+        <div
+          className="flex items-center justify-center gap-2 rounded"
+          style={{
+            height: "clamp(32px, 5vw, 48px)",
+            background: "rgba(201,168,76,0.18)",
+            border: "1px solid rgba(201,168,76,0.45)",
+          }}
+        >
+          <span style={{ fontSize: "clamp(18px, 3vw, 28px)", lineHeight: 1 }}>🏁</span>
+          <span
+            className="font-label uppercase tracking-widest"
+            style={{ fontSize: "clamp(8px, 1.2vw, 11px)", color: "rgba(201,168,76,0.8)" }}
+          >
+            Linha de Chegada
+          </span>
+          {finishTokens.length > 0 && (
+            <div className="flex gap-1 ml-1">
+              {finishTokens.map(({ player, colorIdx }) => (
+                <div
+                  key={player.id}
+                  title={player.nickname}
+                  className="rounded-full"
+                  style={{
+                    width: "clamp(8px, 1.5vw, 12px)",
+                    height: "clamp(8px, 1.5vw, 12px)",
+                    backgroundColor: TOKEN_COLORS[colorIdx % TOKEN_COLORS.length],
+                    boxShadow: player.id === myId ? `0 0 5px ${TOKEN_COLORS[colorIdx % TOKEN_COLORS.length]}` : "none",
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

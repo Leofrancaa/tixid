@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cinzel, Lora, Josefin_Sans } from "next/font/google";
+import { Cinzel, Lora, Josefin_Sans, Almendra_Display } from "next/font/google";
 import "./globals.css";
 
 const cinzel = Cinzel({
@@ -23,14 +23,21 @@ const josefin = Josefin_Sans({
   display: "swap",
 });
 
+const almendra = Almendra_Display({
+  subsets: ["latin"],
+  variable: "--font-vonix",
+  weight: ["400"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Tixid",
-  description: "Dixit multiplayer online — até 6 jogadores",
+  title: "Vonix",
+  description: "Jogo de histórias e imaginação — até 6 jogadores",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${cinzel.variable} ${lora.variable} ${josefin.variable}`}>
+    <html lang="pt-BR" className={`${cinzel.variable} ${lora.variable} ${josefin.variable} ${almendra.variable}`}>
       <body>{children}</body>
     </html>
   );
