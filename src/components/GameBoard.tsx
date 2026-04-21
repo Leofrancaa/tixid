@@ -657,12 +657,18 @@ function VoteBoard({
   const secondarySentRef = useRef(false);
   const [primarySent, setPrimarySent] = useState(false);
   const [secondarySent, setSecondarySent] = useState(false);
+  // Track locally which submission received each vote (for immediate badge display)
+  const [localPrimarySubId, setLocalPrimarySubId] = useState<string | null>(null);
+  const [localSecondarySubId, setLocalSecondarySubId] = useState<string | null>(null);
 
   // My confirmed votes from the server (source of truth once realtime delivers)
   const myPrimaryVote = votes.find((v) => v.voter_id === myPlayerId && !v.is_secondary);
   const mySecondaryVote = votes.find((v) => v.voter_id === myPlayerId && v.is_secondary);
   const hasPrimaryVote = !!myPrimaryVote || primarySent;
   const hasSecondaryVote = !!mySecondaryVote || secondarySent;
+  // Resolved submission IDs for badges (local first, then server confirms)
+  const confirmedPrimarySubId = myPrimaryVote?.submission_id ?? localPrimarySubId;
+  const confirmedSecondarySubId = mySecondaryVote?.submission_id ?? localSecondarySubId;
   const hasOdysseyMode = playerCount >= 7;
 
   const ordered = [...submissions].sort(
@@ -699,9 +705,9 @@ function VoteBoard({
           const isOwn = s.id === mySubmission?.id;
           const isPrimaryPending = s.id === primaryPending;
           const isSecondaryPending = s.id === secondaryPending;
-          // Confirmed votes from server
-          const isMyPrimaryVote = s.id === myPrimaryVote?.submission_id;
-          const isMySecondaryVote = s.id === mySecondaryVote?.submission_id;
+          // Confirmed votes (local state takes effect immediately, server confirms later)
+          const isMyPrimaryVote = s.id === confirmedPrimarySubId;
+          const isMySecondaryVote = s.id === confirmedSecondarySubId;
           // Can't use secondary on the same card already voted primary
           const blockedForSecondary = canSecondary && isMyPrimaryVote;
 
@@ -775,6 +781,7 @@ function VoteBoard({
             if (primarySentRef.current) return;
             primarySentRef.current = true;
             setPrimarySent(true);
+            setLocalPrimarySubId(primaryPending);
             onVote(primaryPending, false);
             setPrimaryPending(null);
           }}
@@ -794,6 +801,7 @@ function VoteBoard({
                 if (secondarySentRef.current) return;
                 secondarySentRef.current = true;
                 setSecondarySent(true);
+                setLocalSecondarySubId(secondaryPending);
                 onVote(secondaryPending, true);
                 setSecondaryPending(null);
               }}
@@ -807,6 +815,17 @@ function VoteBoard({
               Selecione uma carta para o voto secundário
             </div>
           )}
+          <button
+            onClick={() => {
+              if (secondarySentRef.current) return;
+              secondarySentRef.current = true;
+              setSecondarySent(true);
+            }}
+            disabled={busy}
+            className="btn-ghost w-full py-2 text-xs text-parchment/30"
+          >
+            Usar apenas o voto principal
+          </button>
         </div>
       )}
 
@@ -843,11 +862,11 @@ function Reveal({
   onZoom: (url: string) => void;
 }) {
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]));
-  const votesFor: Record<string, PublicPlayer[]> = {};
+  const votesFor: Record<string, { player: PublicPlayer; isSecondary: boolean }[]> = {};
   for (const v of votes) {
     votesFor[v.submission_id] ??= [];
     const voter = playerById[v.voter_id];
-    if (voter) votesFor[v.submission_id].push(voter);
+    if (voter) votesFor[v.submission_id].push({ player: voter, isSecondary: v.is_secondary });
   }
   const ordered = [...submissions].sort(
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
@@ -894,9 +913,20 @@ function Reveal({
                   {owner?.nickname}
                 </p>
                 {votesFor[s.id]?.length ? (
-                  <p className="mt-0.5 font-label text-xs text-parchment/40 leading-tight">
-                    {votesFor[s.id].map((p) => p.nickname).join(", ")}
-                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {votesFor[s.id].map(({ player, isSecondary }) => (
+                      <span
+                        key={player.id + (isSecondary ? "-2" : "-1")}
+                        className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-label text-[9px] leading-none"
+                        style={{
+                          background: isSecondary ? "rgba(122,44,68,0.3)" : "rgba(201,168,76,0.15)",
+                          color: isSecondary ? "rgba(242,236,216,0.55)" : "rgba(201,168,76,0.85)",
+                        }}
+                      >
+                        {isSecondary ? "2°" : "1°"} {player.nickname}
+                      </span>
+                    ))}
+                  </div>
                 ) : (
                   <p className="mt-0.5 font-label text-xs text-parchment/20">sem votos</p>
                 )}
