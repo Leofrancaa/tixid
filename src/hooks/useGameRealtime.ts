@@ -125,13 +125,8 @@ export function useGameRealtime(gameId: string) {
         (payload) => {
           const row = payload.new as RoundRow;
           setRound((cur) => {
-            if (!cur || row.round_number > cur.round_number) {
-              // New round — drop stale submissions/votes from previous round
-              setSubmissions([]);
-              setVotes([]);
-              return row;
-            }
-            return row.round_number >= cur.round_number ? row : cur;
+            if (!cur || row.round_number >= cur.round_number) return row;
+            return cur;
           });
           // On reveal, refetch votes from DB so is_secondary is authoritative
           if (row.phase === "reveal") {
