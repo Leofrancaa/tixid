@@ -124,40 +124,75 @@ export function useGameRealtime(gameId: string) {
         },
         (payload) => {
           const row = payload.new as RoundRow;
-          setRound((cur) =>
-            !cur || row.round_number >= cur.round_number ? row : cur
-          );
+          setRound((cur) => {
+            if (!cur || row.round_number > cur.round_number) {
+              // New round — drop stale submissions/votes from previous round
+              setSubmissions([]);
+              setVotes([]);
+              return row;
+            }
+            return row.round_number >= cur.round_number ? row : cur;
+          });
+          // On reveal, refetch votes from DB so is_secondary is authoritative
+          if (row.phase === "reveal") {
+            supabase
+              .from("round_votes")
+              .select("*")
+              .eq("round_id", row.id)
+              .then(({ data }) => data && setVotes(data as VoteRow[]));
+          }
         }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "round_submissions" },
         (payload) => {
-          const row = payload.new as SubmissionRow;
-          setSubmissions((cur) => {
-            if (!round && !row) return cur;
-            const rid = row?.round_id ?? (payload.old as SubmissionRow)?.round_id;
-            // refetch for simplicity
-            supabase
-              .from("round_submissions")
-              .select("*")
-              .eq("round_id", rid)
-              .then(({ data }) => data && setSubmissions(data as SubmissionRow[]));
-            return cur;
-          });
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as SubmissionRow;
+            // Reset if this belongs to a different round than what's in state
+            setSubmissions((cur) => {
+              if (cur.length > 0 && cur[0].round_id !== row.round_id) return [row];
+              return [...cur, row];
+            });
+          } else {
+            // UPDATE (display_order shuffle when voting starts) or DELETE → refetch
+            const rid =
+              (payload.new as SubmissionRow)?.round_id ??
+              (payload.old as SubmissionRow)?.round_id;
+            if (rid) {
+              supabase
+                .from("round_submissions")
+                .select("*")
+                .eq("round_id", rid)
+                .then(({ data }) => data && setSubmissions(data as SubmissionRow[]));
+            }
+          }
         }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "round_votes" },
         (payload) => {
-          const row = payload.new as VoteRow;
-          const rid = row?.round_id ?? (payload.old as VoteRow)?.round_id;
-          supabase
-            .from("round_votes")
-            .select("*")
-            .eq("round_id", rid)
-            .then(({ data }) => data && setVotes(data as VoteRow[]));
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as VoteRow;
+            // Reset if this belongs to a different round than what's in state
+            setVotes((cur) => {
+              if (cur.length > 0 && cur[0].round_id !== row.round_id) return [row];
+              return [...cur, row];
+            });
+          } else {
+            // DELETE/UPDATE (rare) → refetch for correctness
+            const rid =
+              (payload.new as VoteRow)?.round_id ??
+              (payload.old as VoteRow)?.round_id;
+            if (rid) {
+              supabase
+                .from("round_votes")
+                .select("*")
+                .eq("round_id", rid)
+                .then(({ data }) => data && setVotes(data as VoteRow[]));
+            }
+          }
         }
       )
       .subscribe();

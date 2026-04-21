@@ -218,15 +218,18 @@ export async function castVote(
 
   await db.insert(roundVotes).values({ roundId, voterId, submissionId, isSecondary });
 
-  // Phase advances when all voters have cast their primary vote
-  const allVotes = await db
-    .select()
-    .from(roundVotes)
-    .where(eq(roundVotes.roundId, roundId));
-  const primaryVotes = allVotes.filter((v) => !v.isSecondary);
-
-  if (primaryVotes.length === voters.length) {
-    await resolveRound(roundId);
+  // For 6 or fewer voters: auto-resolve when all primary votes are in
+  // For 7+ voters (Odyssey mode): host manually triggers reveal so everyone
+  // has a chance to cast their optional secondary vote
+  if (voters.length <= 6) {
+    const allVotes = await db
+      .select()
+      .from(roundVotes)
+      .where(eq(roundVotes.roundId, roundId));
+    const primaryVotes = allVotes.filter((v) => !v.isSecondary);
+    if (primaryVotes.length === voters.length) {
+      await resolveRound(roundId);
+    }
   }
 }
 

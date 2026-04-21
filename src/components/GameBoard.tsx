@@ -117,6 +117,12 @@ export default function GameBoard({
     if (!res.ok) setErr((await res.json()).error ?? "erro");
   }
 
+  async function doResolve() {
+    setBusy(true);
+    await fetch(`/api/rounds/${round!.id}/resolve`, { method: "POST" });
+    setBusy(false);
+  }
+
   async function doDeleteGame() {
     if (!confirm("Encerrar e apagar a partida agora? Isso não pode ser desfeito.")) return;
     await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
@@ -238,9 +244,11 @@ export default function GameBoard({
               imageMap={imageMap}
               mySubmission={mySubmission}
               onVote={doVote}
+              onResolve={doResolve}
               votes={votes}
               myPlayerId={myPlayerId}
               imStoryteller={imStoryteller}
+              isHost={isHost}
               playerCount={players.length}
               busy={busy}
               clue={round.clue ?? ""}
@@ -630,9 +638,11 @@ function VoteBoard({
   imageMap,
   mySubmission,
   onVote,
+  onResolve,
   votes,
   myPlayerId,
   imStoryteller,
+  isHost,
   playerCount,
   busy,
   clue,
@@ -642,9 +652,11 @@ function VoteBoard({
   imageMap: Record<string, string>;
   mySubmission: SubmissionRow | undefined;
   onVote: (id: string, isSecondary?: boolean) => void;
+  onResolve: () => void;
   votes: VoteRow[];
   myPlayerId: string;
   imStoryteller: boolean;
+  isHost: boolean;
   playerCount: number;
   busy: boolean;
   clue: string;
@@ -670,6 +682,9 @@ function VoteBoard({
   const confirmedPrimarySubId = myPrimaryVote?.submission_id ?? localPrimarySubId;
   const confirmedSecondarySubId = mySecondaryVote?.submission_id ?? localSecondarySubId;
   const hasOdysseyMode = playerCount >= 7;
+  const nonStorytellerCount = playerCount - 1;
+  const primaryVotesCount = votes.filter((v) => !v.is_secondary).length;
+  const allPrimaryIn = primaryVotesCount >= nonStorytellerCount;
 
   const ordered = [...submissions].sort(
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
@@ -832,6 +847,27 @@ function VoteBoard({
       {canPrimary && !primaryPending && (
         <div className="mt-4 rounded border border-parchment/10 py-3 text-center font-label text-xs tracking-wider text-parchment/25">
           Nenhuma carta selecionada
+        </div>
+      )}
+
+      {/* Host reveal button (Odyssey mode: host triggers reveal after all primary votes) */}
+      {hasOdysseyMode && isHost && (
+        <div className="mt-5 space-y-2">
+          <div className="flex items-center justify-between rounded border border-parchment/10 px-4 py-2.5">
+            <span className="font-label text-xs tracking-widest text-parchment/35">
+              Votos primários recebidos
+            </span>
+            <span className={`font-label text-sm font-semibold ${allPrimaryIn ? "text-dixit-gold" : "text-parchment/50"}`}>
+              {primaryVotesCount} / {nonStorytellerCount}
+            </span>
+          </div>
+          <button
+            onClick={onResolve}
+            disabled={busy || !allPrimaryIn}
+            className="btn-gold w-full py-3.5 text-sm disabled:opacity-40"
+          >
+            {allPrimaryIn ? "Revelar Votos" : `Aguardando votos… (${primaryVotesCount}/${nonStorytellerCount})`}
+          </button>
         </div>
       )}
     </section>
