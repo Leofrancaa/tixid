@@ -172,7 +172,12 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
   }
 }
 
-export async function castVote(roundId: string, voterId: string, submissionId: string) {
+export async function castVote(
+  roundId: string,
+  voterId: string,
+  submissionId: string,
+  isSecondary = false
+) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
   if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada não encontrada");
   if (round.phase !== "voting") throw new GameError("WRONG_PHASE", "Fase inválida");
@@ -188,16 +193,23 @@ export async function castVote(roundId: string, voterId: string, submissionId: s
   if (sub.playerId === voterId)
     throw new GameError("CANT_VOTE_OWN", "Não pode votar na própria carta");
 
-  await db.insert(roundVotes).values({ roundId, voterId, submissionId });
-
   const players = await getGamePlayers(round.gameId);
   const voters = players.filter((p) => p.id !== round.storytellerId);
-  const votes = await db
+
+  // Secondary votes only available for 7+ player games
+  if (isSecondary && voters.length < 6)
+    throw new GameError("NO_SECONDARY", "Voto secundário só disponível com 7+ jogadores");
+
+  await db.insert(roundVotes).values({ roundId, voterId, submissionId, isSecondary });
+
+  // Phase advances when all voters have cast their primary vote
+  const allVotes = await db
     .select()
     .from(roundVotes)
     .where(eq(roundVotes.roundId, roundId));
+  const primaryVotes = allVotes.filter((v) => !v.isSecondary);
 
-  if (votes.length === voters.length) {
+  if (primaryVotes.length === voters.length) {
     await resolveRound(roundId);
   }
 }
@@ -223,15 +235,21 @@ export async function resolveRound(roundId: string) {
     submissionOwner[s.id] = s.playerId;
     if (s.playerId === round.storytellerId) storytellerSubmissionId = s.id;
   }
-  const votesMap: Record<string, string> = {};
-  for (const v of votes) votesMap[v.voterId] = v.submissionId;
+  const primaryVotesMap: Record<string, string> = {};
+  const secondaryVotesMap: Record<string, string> = {};
+  for (const v of votes) {
+    if (v.isSecondary) secondaryVotesMap[v.voterId] = v.submissionId;
+    else primaryVotesMap[v.voterId] = v.submissionId;
+  }
 
   const delta = computeScores({
     storytellerId: round.storytellerId,
     submissionOwner,
     storytellerSubmissionId,
-    votes: votesMap,
+    primaryVotes: primaryVotesMap,
+    secondaryVotes: secondaryVotesMap,
     voterIds: voters.map((v) => v.id),
+    maxPointsPerRound: 5,
   });
 
   for (const [pid, d] of Object.entries(delta)) {

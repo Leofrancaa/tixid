@@ -43,6 +43,7 @@ export interface VoteRow {
   round_id: string;
   voter_id: string;
   submission_id: string;
+  is_secondary: boolean;
 }
 
 export function useGameRealtime(gameId: string) {

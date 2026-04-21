@@ -6,7 +6,7 @@ import { games, gamePlayers, rounds } from "@/lib/db/schema";
 import { readPlayerToken } from "@/lib/auth/playerToken";
 import { castVote, GameError } from "@/lib/game/engine";
 
-const Body = z.object({ submissionId: z.string().uuid() });
+const Body = z.object({ submissionId: z.string().uuid(), isSecondary: z.boolean().optional().default(false) });
 
 export async function POST(
   req: Request,
@@ -28,7 +28,7 @@ export async function POST(
     return NextResponse.json({ error: "não é jogador" }, { status: 403 });
 
   try {
-    await castVote(id, me.id, body.data.submissionId);
+    await castVote(id, me.id, body.data.submissionId, body.data.isSecondary);
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof GameError)

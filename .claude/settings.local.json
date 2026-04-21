@@ -13,7 +13,11 @@
       "Bash(npm audit *)",
       "Bash(npm run *)",
       "Bash(npx tsc *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "WebSearch",
+      "WebFetch(domain:cdn.svc.asmodee.net)",
+      "WebFetch(domain:www.ultraboardgames.com)",
+      "WebFetch(domain:boardgamegeek.com)"
     ]
   }
 }

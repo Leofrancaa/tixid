@@ -32,13 +32,36 @@ const almendra = Almendra_Display({
 
 export const metadata: Metadata = {
   title: "Vonix",
-  description: "Jogo de histórias e imaginação — até 6 jogadores",
+  description: "Jogo de histórias e imaginação — até 12 jogadores",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Vonix",
+  },
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/logo-192.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${cinzel.variable} ${lora.variable} ${josefin.variable} ${almendra.variable}`}>
-      <body>{children}</body>
+      <head>
+        <meta name="theme-color" content="#080810" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/logo-192.png" />
+      </head>
+      <body>
+        {children}
+        <script dangerouslySetInnerHTML={{
+          __html: `if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');`
+        }} />
+      </body>
     </html>
   );
 }

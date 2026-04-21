@@ -116,9 +116,10 @@ export const roundVotes = pgTable(
     submissionId: uuid("submission_id")
       .notNull()
       .references(() => roundSubmissions.id, { onDelete: "cascade" }),
+    isSecondary: boolean("is_secondary").notNull().default(false),
   },
   (t) => ({
-    uniqVoterPerRound: unique().on(t.roundId, t.voterId),
+    uniqVoterPerRound: unique().on(t.roundId, t.voterId, t.isSecondary),
   })
 );
 

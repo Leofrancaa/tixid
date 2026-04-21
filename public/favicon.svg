@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background -->
+  <rect width="64" height="64" rx="12" fill="#080810"/>
+  <!-- Mountains -->
+  <polygon points="0,52 12,32 24,44 36,28 48,40 64,24 64,64 0,64" fill="#1e1640"/>
+  <polygon points="0,58 16,42 28,52 44,36 56,48 64,38 64,64 0,64" fill="#130f2c"/>
+  <!-- Gold V -->
+  <text x="32" y="46" text-anchor="middle" font-family="Georgia, serif" font-size="36" font-weight="bold" fill="#c9a84c" style="font-style:italic">V</text>
+</svg>

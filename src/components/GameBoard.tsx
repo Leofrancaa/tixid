@@ -106,15 +106,21 @@ export default function GameBoard({
     else setSelectedCard(null);
   }
 
-  async function doVote(submissionId: string) {
+  async function doVote(submissionId: string, isSecondary = false) {
     setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/vote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ submissionId }),
+      body: JSON.stringify({ submissionId, isSecondary }),
     });
     setBusy(false);
     if (!res.ok) setErr((await res.json()).error ?? "erro");
+  }
+
+  async function doDeleteGame() {
+    if (!confirm("Encerrar e apagar a partida agora? Isso não pode ser desfeito.")) return;
+    await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    window.location.href = "/";
   }
 
   async function doNext() {
@@ -157,6 +163,15 @@ export default function GameBoard({
           <div className="flex items-center gap-2">
             <span className="phase-badge">{phaseLabel[round.phase] ?? round.phase}</span>
             <span className="font-label text-xs text-parchment/30">R{round.round_number}</span>
+            {isHost && (
+              <button
+                onClick={doDeleteGame}
+                className="btn-ghost px-2 py-1 text-[10px] text-red-400/60 border-red-500/20 hover:text-red-400 hover:border-red-500/40"
+                title="Encerrar jogo"
+              >
+                ✕ fim
+              </button>
+            )}
           </div>
         </header>
 
@@ -223,8 +238,10 @@ export default function GameBoard({
               imageMap={imageMap}
               mySubmission={mySubmission}
               onVote={doVote}
-              iVoted={iVoted}
+              votes={votes}
+              myPlayerId={myPlayerId}
               imStoryteller={imStoryteller}
+              playerCount={players.length}
               busy={busy}
               clue={round.clue ?? ""}
               onZoom={setZoomedUrl}
@@ -613,8 +630,10 @@ function VoteBoard({
   imageMap,
   mySubmission,
   onVote,
-  iVoted,
+  votes,
+  myPlayerId,
   imStoryteller,
+  playerCount,
   busy,
   clue,
   onZoom,
@@ -622,25 +641,34 @@ function VoteBoard({
   submissions: SubmissionRow[];
   imageMap: Record<string, string>;
   mySubmission: SubmissionRow | undefined;
-  onVote: (id: string) => void;
-  iVoted: boolean;
+  onVote: (id: string, isSecondary?: boolean) => void;
+  votes: VoteRow[];
+  myPlayerId: string;
   imStoryteller: boolean;
+  playerCount: number;
   busy: boolean;
   clue: string;
   onZoom: (url: string) => void;
 }) {
-  const [votePending, setVotePending] = useState<string | null>(null);
+  const [primaryPending, setPrimaryPending] = useState<string | null>(null);
+  const [secondaryPending, setSecondaryPending] = useState<string | null>(null);
+
+  const hasPrimaryVote = votes.some((v) => v.voter_id === myPlayerId && !v.is_secondary);
+  const hasSecondaryVote = votes.some((v) => v.voter_id === myPlayerId && v.is_secondary);
+  const hasOdysseyMode = playerCount >= 7;
 
   const ordered = [...submissions].sort(
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
   );
 
-  const canSelect = !imStoryteller && !iVoted && !busy;
+  const canPrimary = !imStoryteller && !hasPrimaryVote && !busy;
+  const canSecondary = !imStoryteller && hasPrimaryVote && hasOdysseyMode && !hasSecondaryVote && !busy;
 
-  function handleConfirm() {
-    if (!votePending) return;
-    onVote(votePending);
-    setVotePending(null);
+  function statusText() {
+    if (imStoryteller) return "Aguarde os votos";
+    if (!hasPrimaryVote) return primaryPending ? "Confirme seu voto principal" : "Toque numa carta para selecionar";
+    if (hasOdysseyMode && !hasSecondaryVote) return secondaryPending ? "Confirme o voto secundário (opcional)" : "Voto principal registrado — escolha um voto secundário ou aguarde";
+    return "Votos registrados — aguarde os demais";
   }
 
   return (
@@ -650,31 +678,25 @@ function VoteBoard({
           Dica do storyteller
         </p>
         <p className="font-serif text-lg italic text-parchment/85">"{clue}"</p>
-        <p className="mt-1.5 font-label text-xs text-parchment/35">
-          {imStoryteller
-            ? "Aguarde os votos"
-            : iVoted
-            ? "Voto registrado — aguarde os demais"
-            : votePending
-            ? "Confirme seu voto abaixo ou escolha outra carta"
-            : "Toque numa carta para selecionar, depois confirme"}
-        </p>
+        {hasOdysseyMode && !imStoryteller && (
+          <p className="mt-1 font-label text-[10px] uppercase tracking-widest text-dixit-gold/50">
+            Modo Odyssey — 2 votos disponíveis
+          </p>
+        )}
+        <p className="mt-1.5 font-label text-xs text-parchment/35">{statusText()}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
         {ordered.map((s) => {
           const isOwn = s.id === mySubmission?.id;
-          const isSelected = s.id === votePending;
+          const isPrimarySelected = s.id === primaryPending;
+          const isSecondarySelected = s.id === secondaryPending;
 
           if (isOwn) {
             return (
               <div key={s.id} className="card-frame relative opacity-50">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageMap[s.card_id] ?? ""}
-                  alt=""
-                  className="aspect-[3/4] w-full object-cover"
-                />
+                <img src={imageMap[s.card_id] ?? ""} alt="" className="aspect-[3/4] w-full object-cover" />
                 <div className="absolute inset-0 flex items-end">
                   <div className="w-full bg-ink/90 py-2 text-center font-label text-xs tracking-widest text-parchment/60 backdrop-blur-sm">
                     sua carta
@@ -682,36 +704,68 @@ function VoteBoard({
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); onZoom(imageMap[s.card_id] ?? ""); }}
-                  className="absolute bottom-8 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-70 transition hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  className="absolute bottom-8 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-70 transition hover:opacity-100"
                 >⛶</button>
               </div>
             );
           }
 
           return (
-            <CardButton
-              key={s.id}
-              imageUrl={imageMap[s.card_id] ?? ""}
-              onClick={canSelect ? () => setVotePending(isSelected ? null : s.id) : undefined}
-              onZoom={onZoom}
-              disabled={!canSelect}
-              selected={isSelected}
-            />
+            <div key={s.id} className="relative">
+              <CardButton
+                imageUrl={imageMap[s.card_id] ?? ""}
+                onClick={
+                  canPrimary ? () => setPrimaryPending(isPrimarySelected ? null : s.id)
+                  : canSecondary ? () => setSecondaryPending(isSecondarySelected ? null : s.id)
+                  : undefined
+                }
+                onZoom={onZoom}
+                disabled={!canPrimary && !canSecondary}
+                selected={isPrimarySelected || isSecondarySelected}
+              />
+              {/* Badge showing which vote type is selected */}
+              {isPrimarySelected && (
+                <div className="absolute left-1 top-1 rounded bg-dixit-gold/90 px-1.5 py-0.5 font-label text-[9px] font-bold text-ink">1°</div>
+              )}
+              {isSecondarySelected && (
+                <div className="absolute left-1 top-1 rounded bg-dixit-rose/90 px-1.5 py-0.5 font-label text-[9px] font-bold text-parchment">2°</div>
+              )}
+            </div>
           );
         })}
       </div>
 
-      {/* Confirm button — only shown when a card is selected and voting is allowed */}
-      {canSelect && votePending && (
+      {/* Primary vote confirm */}
+      {canPrimary && primaryPending && (
         <button
-          onClick={handleConfirm}
+          onClick={() => { onVote(primaryPending, false); setPrimaryPending(null); }}
           disabled={busy}
           className="btn-gold mt-5 w-full py-3.5 text-sm"
         >
-          Confirmar Voto
+          Confirmar Voto Principal
         </button>
       )}
-      {canSelect && !votePending && !iVoted && (
+
+      {/* Secondary vote confirm + skip */}
+      {canSecondary && (
+        <div className="mt-4 space-y-2">
+          {secondaryPending ? (
+            <button
+              onClick={() => { onVote(secondaryPending, true); setSecondaryPending(null); }}
+              disabled={busy}
+              className="btn-wine w-full py-3 text-sm"
+            >
+              Confirmar Voto Secundário (+1 pt)
+            </button>
+          ) : (
+            <div className="rounded border border-parchment/10 py-3 text-center font-label text-xs tracking-wider text-parchment/25">
+              Selecione uma carta para o voto secundário
+            </div>
+          )}
+        </div>
+      )}
+
+      {canPrimary && !primaryPending && (
         <div className="mt-4 rounded border border-parchment/10 py-3 text-center font-label text-xs tracking-wider text-parchment/25">
           Nenhuma carta selecionada
         </div>
