@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx claude-mem *)",
+      "Read(//c/Users/Administrador/.claude/plugins/marketplaces/thedotmack/**)",
+      "Read(//c/Users/Administrador/.claude/**)",
+      "Bash(node ~/.claude/plugins/marketplaces/thedotmack/plugin/scripts/smart-install.js)",
+      "Bash(powershell -c \"irm bun.sh/install.ps1 | iex\")",
+      "Bash(export PATH=\"$HOME/.bun/bin:$PATH\")",
+      "Bash(bun --version)",
+      "Bash(npm install *)",
+      "Bash(npm show *)",
+      "Bash(npm audit *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)"
+    ]
+  }
+}
