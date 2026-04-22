@@ -218,10 +218,10 @@ export async function castVote(
 
   await db.insert(roundVotes).values({ roundId, voterId, submissionId, isSecondary });
 
-  // For 6 or fewer voters: auto-resolve when all primary votes are in
-  // For 7+ voters (Odyssey mode): host manually triggers reveal so everyone
+  // For ≤5 voters (≤6 players, non-Odyssey): auto-resolve when all primary votes are in
+  // For 6+ voters (7+ players, Odyssey mode): host manually triggers reveal so everyone
   // has a chance to cast their optional secondary vote
-  if (voters.length <= 6) {
+  if (voters.length < 6) {
     const allVotes = await db
       .select()
       .from(roundVotes)
