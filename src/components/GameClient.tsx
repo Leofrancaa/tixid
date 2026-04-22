@@ -64,6 +64,16 @@ export default function GameClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.round?.phase, rt.round?.id, rt.game?.status]);
 
+  // Fallback: if me says game is playing but realtime didn't deliver the round,
+  // force a refetch so GameBoard doesn't stay stuck on "Carregando rodada...".
+  useEffect(() => {
+    const playing = (rt.game?.status ?? me?.game.status ?? "lobby") !== "lobby";
+    const needsRound = !rt.round && !!me?.game.currentRoundId;
+    if (playing && needsRound) {
+      rt.refetch();
+    }
+  }, [rt, me?.game.status, me?.game.currentRoundId]);
+
   if (rt.game) {
     gameEverLoaded.current = true;
   }

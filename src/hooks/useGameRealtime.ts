@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export interface PublicPlayer {
@@ -53,39 +53,39 @@ export function useGameRealtime(gameId: string) {
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [votes, setVotes] = useState<VoteRow[]>([]);
 
+  const refetch = useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    const [g, p, r] = await Promise.all([
+      supabase.from("games").select("*").eq("id", gameId).single(),
+      supabase
+        .from("game_players_public")
+        .select("*")
+        .eq("game_id", gameId)
+        .order("seat_order"),
+      supabase
+        .from("rounds")
+        .select("*")
+        .eq("game_id", gameId)
+        .order("round_number", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (g.data) setGame(g.data as GameRow);
+    if (p.data) setPlayers(p.data as PublicPlayer[]);
+    if (r.data) {
+      setRound(r.data as RoundRow);
+      const [subs, vts] = await Promise.all([
+        supabase.from("round_submissions").select("*").eq("round_id", r.data.id),
+        supabase.from("round_votes").select("*").eq("round_id", r.data.id),
+      ]);
+      if (subs.data) setSubmissions(subs.data as SubmissionRow[]);
+      if (vts.data) setVotes(vts.data as VoteRow[]);
+    }
+  }, [gameId]);
+
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-
-    async function initialLoad() {
-      const [g, p, r] = await Promise.all([
-        supabase.from("games").select("*").eq("id", gameId).single(),
-        supabase
-          .from("game_players_public")
-          .select("*")
-          .eq("game_id", gameId)
-          .order("seat_order"),
-        supabase
-          .from("rounds")
-          .select("*")
-          .eq("game_id", gameId)
-          .order("round_number", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      if (g.data) setGame(g.data as GameRow);
-      if (p.data) setPlayers(p.data as PublicPlayer[]);
-      if (r.data) {
-        setRound(r.data as RoundRow);
-        const [subs, vts] = await Promise.all([
-          supabase.from("round_submissions").select("*").eq("round_id", r.data.id),
-          supabase.from("round_votes").select("*").eq("round_id", r.data.id),
-        ]);
-        if (subs.data) setSubmissions(subs.data as SubmissionRow[]);
-        if (vts.data) setVotes(vts.data as VoteRow[]);
-      }
-    }
-
-    initialLoad();
+    refetch();
 
     const channel = supabase
       .channel(`game:${gameId}`)
@@ -93,8 +93,29 @@ export function useGameRealtime(gameId: string) {
         "postgres_changes",
         { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` },
         (payload) => {
-          if (payload.eventType === "DELETE") setGame(null);
-          else setGame(payload.new as GameRow);
+          if (payload.eventType === "DELETE") {
+            setGame(null);
+            return;
+          }
+          const row = payload.new as GameRow;
+          setGame(row);
+          // Fallback: if game transitioned to playing but rounds INSERT realtime
+          // didn't arrive, fetch the current round directly so GameBoard doesn't
+          // stay on "Carregando rodada...".
+          if (row.status !== "lobby" && row.current_round_id) {
+            supabase
+              .from("rounds")
+              .select("*")
+              .eq("id", row.current_round_id)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (!data) return;
+                const r = data as RoundRow;
+                setRound((cur) =>
+                  !cur || r.round_number >= cur.round_number ? r : cur
+                );
+              });
+          }
         }
       )
       .on(
@@ -198,5 +219,5 @@ export function useGameRealtime(gameId: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
 
-  return { game, players, round, submissions, votes };
+  return { game, players, round, submissions, votes, refetch };
 }
