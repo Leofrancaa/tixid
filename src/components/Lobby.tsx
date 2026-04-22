@@ -37,7 +37,12 @@ export default function Lobby({
 
   async function closeRoom() {
     if (!confirm("Encerrar e apagar a sala?")) return;
-    await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    const res = await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErr(data.error ?? "Falha ao encerrar sala. Tente novamente.");
+      return;
+    }
     window.location.href = "/";
   }
 

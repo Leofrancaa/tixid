@@ -125,7 +125,12 @@ export default function GameBoard({
 
   async function doDeleteGame() {
     if (!confirm("Encerrar e apagar a partida agora? Isso não pode ser desfeito.")) return;
-    await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    const res = await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Falha ao encerrar sala. Tente novamente.");
+      return;
+    }
     window.location.href = "/";
   }
 
@@ -999,7 +1004,12 @@ function EndScreen({
   const winner = sorted[0];
 
   async function deleteGame() {
-    await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    const res = await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Falha ao encerrar sala. Tente novamente.");
+      return;
+    }
     window.location.href = "/";
   }
 
