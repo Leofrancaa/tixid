@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import type { PublicPlayer } from "@/hooks/useGameRealtime";
+import ConfirmDialog from "./ui/ConfirmDialog";
 
 export default function Lobby({
   code,
@@ -16,6 +18,8 @@ export default function Lobby({
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   async function copyCode() {
     try {
@@ -36,11 +40,13 @@ export default function Lobby({
   }
 
   async function closeRoom() {
-    if (!confirm("Encerrar e apagar a sala?")) return;
+    setClosing(true);
     const res = await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setErr(data.error ?? "Falha ao encerrar sala. Tente novamente.");
+      setClosing(false);
+      setConfirmOpen(false);
       return;
     }
     window.location.href = "/";
@@ -175,7 +181,7 @@ export default function Lobby({
                 ? "Iniciando partida..."
                 : "Iniciar Partida"}
             </button>
-            <button onClick={closeRoom} className="btn-ghost w-full text-xs">
+            <button onClick={() => setConfirmOpen(true)} className="btn-ghost w-full text-xs">
               Encerrar sala
             </button>
           </div>
@@ -187,7 +193,28 @@ export default function Lobby({
           </div>
         )}
 
+        <div className="mt-6 text-center">
+          <Link
+            href="/regras"
+            className="font-label text-xs uppercase tracking-widest text-parchment/25 transition hover:text-parchment/55"
+          >
+            Como jogar
+          </Link>
+        </div>
+
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Encerrar sala?"
+        message="A sala será apagada e todos os jogadores serão desconectados."
+        confirmLabel="Encerrar"
+        cancelLabel="Cancelar"
+        variant="danger"
+        busy={closing}
+        onConfirm={closeRoom}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </main>
   );
 }

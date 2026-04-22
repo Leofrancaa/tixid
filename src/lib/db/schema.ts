@@ -71,7 +71,7 @@ export const rounds = pgTable(
     roundNumber: integer("round_number").notNull(),
     storytellerId: uuid("storyteller_id")
       .notNull()
-      .references(() => gamePlayers.id),
+      .references(() => gamePlayers.id, { onDelete: "cascade" }),
     clue: text("clue"),
     storytellerCardId: uuid("storyteller_card_id").references(() => cards.id),
     phase: roundPhase("phase").notNull().default("clue"),
@@ -92,7 +92,7 @@ export const roundSubmissions = pgTable(
       .references(() => rounds.id, { onDelete: "cascade" }),
     playerId: uuid("player_id")
       .notNull()
-      .references(() => gamePlayers.id),
+      .references(() => gamePlayers.id, { onDelete: "cascade" }),
     cardId: uuid("card_id")
       .notNull()
       .references(() => cards.id),
@@ -112,7 +112,7 @@ export const roundVotes = pgTable(
       .references(() => rounds.id, { onDelete: "cascade" }),
     voterId: uuid("voter_id")
       .notNull()
-      .references(() => gamePlayers.id),
+      .references(() => gamePlayers.id, { onDelete: "cascade" }),
     submissionId: uuid("submission_id")
       .notNull()
       .references(() => roundSubmissions.id, { onDelete: "cascade" }),

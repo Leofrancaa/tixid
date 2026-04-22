@@ -152,8 +152,14 @@ export default function HomePage() {
             3 – 12 jogadores
           </p>
           <Link
+            href="/regras"
+            className="mt-4 block font-label text-xs tracking-widest text-parchment/35 transition hover:text-dixit-gold uppercase"
+          >
+            Como jogar
+          </Link>
+          <Link
             href="/admin"
-            className="mt-6 block font-label text-xs tracking-widest text-parchment/15 transition hover:text-parchment/40 uppercase"
+            className="mt-3 block font-label text-xs tracking-widest text-parchment/15 transition hover:text-parchment/40 uppercase"
           >
             admin
           </Link>

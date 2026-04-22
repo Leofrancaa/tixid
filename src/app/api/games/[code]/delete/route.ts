@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { games, gamePlayers, rounds } from "@/lib/db/schema";
+import { games, gamePlayers } from "@/lib/db/schema";
 import { readPlayerToken } from "@/lib/auth/playerToken";
 
 export async function DELETE(
@@ -23,21 +23,11 @@ export async function DELETE(
   if (game.hostPlayerId !== me.id)
     return NextResponse.json({ error: "só o host pode encerrar" }, { status: 403 });
 
-  // FK-safe deletion order in a single transaction: rounds.storyteller_id,
-  // round_submissions.player_id, and round_votes.voter_id all reference
-  // game_players WITHOUT ON DELETE CASCADE. Delete rounds first (cascades
-  // submissions + votes), then game_players, then the game. Clear
-  // current_round_id first to drop the dangling pointer before rounds go.
+  // After migration 0009, all FKs pointing to game_players cascade on delete,
+  // and game_players.game_id already cascades. Deleting the game removes
+  // everything (players, rounds, submissions, votes) in one statement.
   try {
-    await db.transaction(async (tx) => {
-      await tx
-        .update(games)
-        .set({ currentRoundId: null })
-        .where(eq(games.id, game.id));
-      await tx.delete(rounds).where(eq(rounds.gameId, game.id));
-      await tx.delete(gamePlayers).where(eq(gamePlayers.gameId, game.id));
-      await tx.delete(games).where(eq(games.id, game.id));
-    });
+    await db.delete(games).where(eq(games.id, game.id));
   } catch (e) {
     console.error("[delete route] failed:", e);
     return NextResponse.json(

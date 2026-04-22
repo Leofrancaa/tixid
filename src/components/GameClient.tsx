@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useGameRealtime } from "@/hooks/useGameRealtime";
 import Lobby from "./Lobby";
-import GameBoard from "./GameBoard";
+import GameBoard from "./game/GameBoard";
+import { RoomSkeleton } from "./ui/Skeleton";
 
 interface MeData {
   player: {
@@ -88,13 +89,7 @@ export default function GameClient({
     );
   }
 
-  if (!rt.game) {
-    return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="font-serif italic text-parchment/40">Carregando sala {code}...</p>
-      </main>
-    );
-  }
+  if (!rt.game) return <RoomSkeleton code={code} />;
 
   // Use realtime status when available; fall back to me.game.status so the
   // transition to GameBoard doesn't depend solely on realtime firing.
