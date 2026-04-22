@@ -15,6 +15,25 @@ export default function Lobby({
 }) {
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement("textarea");
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  }
 
   async function closeRoom() {
     if (!confirm("Encerrar e apagar a sala?")) return;
@@ -60,14 +79,39 @@ export default function Lobby({
           <p className="mb-1 font-label text-xs uppercase tracking-[0.25em] text-parchment/35">
             Código da sala
           </p>
-          <div
-            className="my-2 font-display text-5xl font-semibold tracking-[0.3em] text-dixit-gold"
-            style={{ textShadow: "0 0 30px rgba(201,168,76,0.25)" }}
+          <button
+            onClick={copyCode}
+            aria-label="Copiar código da sala"
+            className="group relative my-2 inline-flex items-center gap-3 rounded-lg px-3 py-1 transition hover:bg-dixit-gold/5"
           >
-            {code}
-          </div>
+            <span
+              className="font-display text-5xl font-semibold tracking-[0.3em] text-dixit-gold"
+              style={{ textShadow: "0 0 30px rgba(201,168,76,0.25)" }}
+            >
+              {code}
+            </span>
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded border transition ${
+                copied
+                  ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
+                  : "border-dixit-gold/30 text-dixit-gold/60 group-hover:border-dixit-gold/60 group-hover:text-dixit-gold"
+              }`}
+              title={copied ? "Copiado" : "Copiar"}
+            >
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              )}
+            </span>
+          </button>
           <p className="font-label text-xs tracking-wider text-parchment/30">
-            Compartilhe com seus amigos
+            {copied ? "Código copiado!" : "Toque no código para copiar"}
           </p>
         </div>
 
