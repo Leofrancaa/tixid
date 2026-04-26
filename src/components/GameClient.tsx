@@ -37,10 +37,19 @@ export default function GameClient({
   const [me, setMe] = useState<MeData | null>(null);
   const gameEverLoaded = useRef(false);
 
-  async function refreshMe() {
+  async function refreshMe(): Promise<MeData | null> {
     const res = await fetch(`/api/games/${code}/me`, { cache: "no-store" });
-    if (res.status === 404) { window.location.href = "/"; return; }
-    if (res.ok) setMe(await res.json());
+    if (res.status === 404) { window.location.href = "/"; return null; }
+    if (res.ok) {
+      const data = (await res.json()) as MeData;
+      setMe(data);
+      return data;
+    }
+    return null;
+  }
+
+  async function syncGameState() {
+    await Promise.all([refreshMe(), rt.refetch()]);
   }
 
   useEffect(() => {
@@ -102,6 +111,11 @@ export default function GameClient({
     rt.game.status !== "lobby"
       ? rt.game.status
       : (me?.game.status ?? "lobby");
+  const realtimeMode = rt.game.mode ?? "classic";
+  const effectiveMode =
+    effectiveStatus === "lobby"
+      ? realtimeMode
+      : (me?.game.mode ?? realtimeMode);
 
   if (effectiveStatus === "lobby") {
     return (
@@ -109,8 +123,9 @@ export default function GameClient({
         code={code}
         players={rt.players}
         isHost={isHost}
-        mode={rt.game.mode ?? me?.game.mode ?? "classic"}
-        onStarted={refreshMe}
+        mode={realtimeMode}
+        onStarted={syncGameState}
+        onModeChanged={syncGameState}
       />
     );
   }
@@ -127,7 +142,7 @@ export default function GameClient({
       hand={me?.hand ?? []}
       gameStatus={effectiveStatus}
       targetScore={rt.game.target_score ?? 30}
-      mode={rt.game.mode ?? me?.game.mode ?? "classic"}
+      mode={effectiveMode}
     />
   );
 }

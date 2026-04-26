@@ -1,8 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { PublicPlayer } from "@/hooks/useGameRealtime";
 import ConfirmDialog from "./ui/ConfirmDialog";
+
+type GameMode = "classic" | "questions" | "stella";
 
 export default function Lobby({
   code,
@@ -10,12 +12,14 @@ export default function Lobby({
   isHost,
   mode,
   onStarted,
+  onModeChanged,
 }: {
   code: string;
   players: PublicPlayer[];
   isHost: boolean;
-  mode: "classic" | "questions" | "stella";
-  onStarted?: () => void;
+  mode: GameMode;
+  onStarted?: () => void | Promise<void>;
+  onModeChanged?: () => void | Promise<void>;
 }) {
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -23,20 +27,37 @@ export default function Lobby({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [displayMode, setDisplayMode] = useState<GameMode>(mode);
 
-  async function setMode(next: "classic" | "questions" | "stella") {
-    if (next === mode || switching) return;
+  useEffect(() => {
+    if (!switching) setDisplayMode(mode);
+  }, [mode, switching]);
+
+  async function setMode(next: GameMode) {
+    if (next === displayMode || switching) return;
+    const previousMode = displayMode;
+    setDisplayMode(next);
     setSwitching(true);
-    const res = await fetch(`/api/games/${code}/mode`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: next }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setErr(data.error ?? "Falha ao trocar modo");
+    setErr(null);
+    try {
+      const res = await fetch(`/api/games/${code}/mode`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDisplayMode(previousMode);
+        setErr(data.error ?? "Falha ao trocar modo");
+        return;
+      }
+      await onModeChanged?.();
+    } catch {
+      setDisplayMode(previousMode);
+      setErr("Erro de conexão. Tente novamente.");
+    } finally {
+      setSwitching(false);
     }
-    setSwitching(false);
   }
 
   async function copyCode() {
@@ -71,6 +92,7 @@ export default function Lobby({
   }
 
   async function start() {
+    if (switching) return;
     setStarting(true);
     setErr(null);
     try {
@@ -80,7 +102,7 @@ export default function Lobby({
         setErr(data.error ?? "Erro ao iniciar. Tente novamente.");
       } else {
         // Trigger immediate refresh so transition doesn't depend only on realtime
-        onStarted?.();
+        await onStarted?.();
       }
     } catch {
       setErr("Erro de conexão. Tente novamente.");
@@ -111,10 +133,10 @@ export default function Lobby({
           <button
             onClick={copyCode}
             aria-label="Copiar código da sala"
-            className="group relative my-2 inline-flex items-center gap-3 rounded-lg px-3 py-1 transition hover:bg-dixit-gold/5"
+            className="group relative my-2 inline-flex max-w-full items-center justify-center gap-2 rounded-lg px-2 py-1 transition hover:bg-dixit-gold/5 sm:gap-3 sm:px-3"
           >
             <span
-              className="font-display text-5xl font-semibold tracking-[0.3em] text-dixit-gold"
+              className="min-w-0 truncate font-display text-4xl font-semibold tracking-[0.2em] text-dixit-gold sm:text-5xl sm:tracking-[0.3em]"
               style={{ textShadow: "0 0 30px rgba(201,168,76,0.25)" }}
             >
               {code}
@@ -196,7 +218,7 @@ export default function Lobby({
                 onClick={() => setMode("classic")}
                 disabled={switching}
                 className={`rounded border px-3 py-2.5 text-left transition ${
-                  mode === "classic"
+                  displayMode === "classic"
                     ? "border-dixit-gold/60 bg-dixit-gold/10"
                     : "border-parchment/10 hover:border-parchment/25"
                 }`}
@@ -210,7 +232,7 @@ export default function Lobby({
                 onClick={() => setMode("questions")}
                 disabled={switching}
                 className={`rounded border px-3 py-2.5 text-left transition ${
-                  mode === "questions"
+                  displayMode === "questions"
                     ? "border-dixit-gold/60 bg-dixit-gold/10"
                     : "border-parchment/10 hover:border-parchment/25"
                 }`}
@@ -224,7 +246,7 @@ export default function Lobby({
                 onClick={() => setMode("stella")}
                 disabled={switching}
                 className={`rounded border px-3 py-2.5 text-left transition ${
-                  mode === "stella"
+                  displayMode === "stella"
                     ? "border-dixit-gold/60 bg-dixit-gold/10"
                     : "border-parchment/10 hover:border-parchment/25"
                 }`}
@@ -249,11 +271,13 @@ export default function Lobby({
           <div className="space-y-2.5">
             <button
               onClick={start}
-              disabled={starting || !canStart}
+              disabled={starting || switching || !canStart}
               className="btn-gold w-full py-3.5 text-sm"
             >
               {!canStart
                 ? `Aguardando mín. 3 jogadores (${players.length}/3)`
+                : switching
+                ? "Atualizando modo..."
                 : starting
                 ? "Iniciando partida..."
                 : "Iniciar Partida"}
