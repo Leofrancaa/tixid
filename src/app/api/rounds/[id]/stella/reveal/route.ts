@@ -27,7 +27,7 @@ export async function POST(
   if (!token) return NextResponse.json({ error: "sem token" }, { status: 401 });
   const [me] = await db.select().from(gamePlayers).where(eq(gamePlayers.playerToken, token));
   if (!me || me.gameId !== game.id)
-    return NextResponse.json({ error: "nÃ£o Ã© jogador" }, { status: 403 });
+    return NextResponse.json({ error: "nao e jogador" }, { status: 403 });
 
   try {
     await revealStellaCard(id, me.id, body.data.cardId);

@@ -133,7 +133,7 @@ export default function StellaPhase({
   if (round.phase === "submitting") {
     if (myState?.submitted_at) {
       return (
-        <Waiting text={`Aguardando escolhas — ${submittedCount} de ${players.length}`} />
+        <Waiting text={`Aguardando escolhas - ${submittedCount} de ${players.length}`} />
       );
     }
 
@@ -176,7 +176,7 @@ export default function StellaPhase({
             {isCurrentScout
               ? "Sua vez de revelar uma carta marcada"
               : currentScoutName
-                ? `${currentScoutName} estÃ¡ revelando`
+                ? `${currentScoutName} esta revelando`
                 : "Revelando escolhas"}
           </p>
         </div>
@@ -184,7 +184,7 @@ export default function StellaPhase({
         <div className="panel mb-4 overflow-hidden">
           <div className="border-b border-dixit-gold/10 px-4 py-2.5">
             <p className="font-label text-xs uppercase tracking-widest text-parchment/35">
-              AnÃºncio das escolhas
+              Anuncio das escolhas
             </p>
           </div>
           <div className="grid gap-2 p-3 sm:grid-cols-2">
@@ -200,8 +200,8 @@ export default function StellaPhase({
                   </span>
                   <span className="font-label text-xs text-parchment/45">
                     {state?.selection_count ?? 0} cartas
-                    {state?.in_dark ? " · no escuro" : ""}
-                    {state?.fallen ? " · caiu" : ""}
+                    {state?.in_dark ? " - no escuro" : ""}
+                    {state?.fallen ? " - caiu" : ""}
                   </span>
                 </div>
               );
@@ -229,8 +229,8 @@ export default function StellaPhase({
                     </p>
                     <p className="mt-0.5 font-label text-xs text-parchment/35">
                       {reveal.outcome === "fall"
-                        ? "NinguÃ©m mais marcou essa carta"
-                        : `TambÃ©m marcaram: ${names(reveal.matched_player_ids)}`}
+                        ? "Ninguem mais marcou essa carta"
+                        : `Tambem marcaram: ${names(reveal.matched_player_ids)}`}
                     </p>
                   </div>
                 </div>
@@ -242,7 +242,7 @@ export default function StellaPhase({
         {isCurrentScout ? (
           renderGrid({ revealMode: true })
         ) : (
-          <Waiting text={currentScoutName ? `Aguardando ${currentScoutName}` : "Aguardando revelaÃ§Ã£o"} />
+          <Waiting text={currentScoutName ? `Aguardando ${currentScoutName}` : "Aguardando revelacao"} />
         )}
       </section>
     );
@@ -270,7 +270,7 @@ export default function StellaPhase({
                     <p className="font-serif text-sm text-parchment/85">{player.nickname}</p>
                     <p className="font-label text-xs text-parchment/30">
                       {state?.in_dark ? "No escuro" : "Luz acesa"}
-                      {state?.fallen ? " · caiu" : ""}
+                      {state?.fallen ? " - caiu" : ""}
                     </p>
                   </div>
                   <span className="font-label text-sm font-semibold text-dixit-gold">
@@ -287,7 +287,7 @@ export default function StellaPhase({
           disabled={busy}
           className="btn-gold mt-6 w-full py-3.5 text-sm"
         >
-          {round.round_number >= 4 ? "Finalizar Partida" : "PrÃ³xima Rodada"}
+          {round.round_number >= 4 ? "Finalizar Partida" : "Proxima Rodada"}
         </button>
       )}
     </section>

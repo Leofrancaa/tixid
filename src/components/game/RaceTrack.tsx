@@ -54,18 +54,18 @@ export default function RaceTrack({
   return (
     <>
       <div className="panel overflow-hidden">
-        <div className="flex items-center justify-between border-b border-dixit-gold/10 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3 border-b border-dixit-gold/10 px-4 py-2.5">
           <span className="font-label text-xs uppercase tracking-widest text-parchment/30">
             Tabuleiro
           </span>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
             {myPlayer && (
               <button
                 onClick={() => setDetailsOpen(true)}
-                className="hidden items-center gap-1.5 rounded border border-dixit-gold/20 px-2 py-1 transition hover:border-dixit-gold/40 sm:flex"
+                className="flex shrink-0 items-center gap-1.5 rounded border border-dixit-gold/20 px-2 py-1 transition hover:border-dixit-gold/40"
               >
                 <span className="font-label text-[10px] uppercase tracking-widest text-parchment/30">
-                  Seu ícone
+                  Seu icone
                 </span>
                 <span
                   className="inline-flex h-4 w-4 items-center justify-center rounded-full font-label text-[9px] font-bold text-ink"
@@ -75,7 +75,7 @@ export default function RaceTrack({
                 </span>
               </button>
             )}
-            <div className="flex max-w-[65vw] flex-wrap items-center justify-end gap-2 sm:max-w-none">
+            <div className="flex max-w-[60vw] flex-wrap items-center justify-end gap-2 sm:max-w-none">
               {players.map((p) => (
                 <button
                   key={p.id}

@@ -244,7 +244,7 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
   const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
   const isStella = game.mode === "stella";
   if (isStella)
-    throw new GameError("STELLA_ONLY", "Use a seleÃ§Ã£o Stella nesta rodada");
+    throw new GameError("STELLA_ONLY", "Use a selecao Stella nesta rodada");
 
   // In classic/questions, storyteller already submitted their card during clue.
   if (!isStella && round.storytellerId === playerId)
@@ -292,16 +292,16 @@ export async function submitStellaSelection(
   cardIds: string[]
 ) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
-  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nÃ£o encontrada");
-  if (round.phase !== "submitting") throw new GameError("WRONG_PHASE", "Fase invÃ¡lida");
+  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nao encontrada");
+  if (round.phase !== "submitting") throw new GameError("WRONG_PHASE", "Fase invalida");
 
   const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
   if (game.mode !== "stella")
-    throw new GameError("NOT_STELLA", "Rodada nÃ£o Ã© Stella");
+    throw new GameError("NOT_STELLA", "Rodada nao e Stella");
 
   const players = await getGamePlayers(round.gameId);
   if (!players.some((p) => p.id === playerId))
-    throw new GameError("NOT_PLAYER", "Jogador invÃ¡lido");
+    throw new GameError("NOT_PLAYER", "Jogador invalido");
 
   const uniqueCardIds = [...new Set(cardIds)];
   if (
@@ -321,9 +321,9 @@ export async function submitStellaSelection(
     .from(stellaPlayerRounds)
     .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, playerId)));
   if (!publicState)
-    throw new GameError("PLAYER_STATE_NOT_FOUND", "Estado Stella nÃ£o encontrado");
+    throw new GameError("PLAYER_STATE_NOT_FOUND", "Estado Stella nao encontrado");
   if (publicState.submittedAt)
-    throw new GameError("ALREADY_SUBMITTED", "VocÃª jÃ¡ enviou suas escolhas");
+    throw new GameError("ALREADY_SUBMITTED", "Voce ja enviou suas escolhas");
 
   await db.insert(stellaSelections).values(
     uniqueCardIds.map((cardId) => ({ roundId, playerId, cardId }))
@@ -367,7 +367,7 @@ export async function submitStellaSelection(
 
 async function finishStellaReveal(roundId: string) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
-  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nÃ£o encontrada");
+  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nao encontrada");
 
   const playerRows = await db
     .select()
@@ -414,12 +414,12 @@ async function finishStellaReveal(roundId: string) {
 
 export async function revealStellaCard(roundId: string, playerId: string, cardId: string) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
-  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nÃ£o encontrada");
-  if (round.phase !== "voting") throw new GameError("WRONG_PHASE", "Fase invÃ¡lida");
+  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nao encontrada");
+  if (round.phase !== "voting") throw new GameError("WRONG_PHASE", "Fase invalida");
 
   const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
   if (game.mode !== "stella")
-    throw new GameError("NOT_STELLA", "Rodada nÃ£o Ã© Stella");
+    throw new GameError("NOT_STELLA", "Rodada nao e Stella");
 
   const [currentState] = await db
     .select()
@@ -428,7 +428,7 @@ export async function revealStellaCard(roundId: string, playerId: string, cardId
   if (!currentState?.isCurrentScout)
     throw new GameError("NOT_SCOUT", "Aguarde sua vez de revelar");
   if (currentState.fallen)
-    throw new GameError("SCOUT_FALLEN", "Jogador jÃ¡ caiu nesta rodada");
+    throw new GameError("SCOUT_FALLEN", "Jogador ja caiu nesta rodada");
 
   const grid = await getStellaRoundGrid(roundId);
   if (!grid.some((c) => c.cardId === cardId))
@@ -440,11 +440,11 @@ export async function revealStellaCard(roundId: string, playerId: string, cardId
     .where(eq(stellaReveals.roundId, roundId))
     .orderBy(stellaReveals.revealOrder);
   if (revealedRows.some((row) => row.cardId === cardId))
-    throw new GameError("ALREADY_REVEALED", "Carta jÃ¡ revelada");
+    throw new GameError("ALREADY_REVEALED", "Carta ja revelada");
 
   const selectionMap = await getStellaSelectionMap(roundId);
   if (!(selectionMap[playerId] ?? []).includes(cardId))
-    throw new GameError("CARD_NOT_SELECTED", "Revele uma carta que vocÃª marcou");
+    throw new GameError("CARD_NOT_SELECTED", "Revele uma carta que voce marcou");
 
   const players = await getGamePlayers(round.gameId);
   const playerRows = await db
