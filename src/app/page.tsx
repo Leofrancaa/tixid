@@ -151,12 +151,21 @@ export default function HomePage() {
           <p className="font-label text-xs tracking-widest text-parchment/20 uppercase">
             3 – 12 jogadores
           </p>
-          <Link
-            href="/regras"
-            className="mt-4 block font-label text-xs tracking-widest text-parchment/35 transition hover:text-dixit-gold uppercase"
-          >
-            Como jogar
-          </Link>
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <Link
+              href="/regras"
+              className="font-label text-xs tracking-widest text-parchment/35 transition hover:text-dixit-gold uppercase"
+            >
+              Como jogar
+            </Link>
+            <span className="h-3 w-px bg-parchment/15" />
+            <Link
+              href="/deck"
+              className="font-label text-xs tracking-widest text-parchment/35 transition hover:text-dixit-gold uppercase"
+            >
+              Ver deck
+            </Link>
+          </div>
           <Link
             href="/admin"
             className="mt-3 block font-label text-xs tracking-widest text-parchment/15 transition hover:text-parchment/40 uppercase"
