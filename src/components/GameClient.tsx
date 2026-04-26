@@ -20,6 +20,7 @@ interface MeData {
     mode: "classic" | "questions" | "stella";
     currentRoundId: string | null;
   };
+  stellaSelectionIds?: string[];
 }
 
 export default function GameClient({
@@ -139,6 +140,10 @@ export default function GameClient({
       round={rt.round}
       submissions={rt.submissions}
       votes={rt.votes}
+      stellaCards={rt.stellaCards}
+      stellaPlayerRounds={rt.stellaPlayerRounds}
+      stellaReveals={rt.stellaReveals}
+      stellaSelectionIds={me?.stellaSelectionIds ?? []}
       hand={me?.hand ?? []}
       gameStatus={effectiveStatus}
       targetScore={rt.game.target_score ?? 30}

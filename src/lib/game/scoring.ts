@@ -20,13 +20,13 @@ export type ScoreDelta = Record<string, number>;
  * Dixit / Dixit Odyssey scoring:
  *
  * Primary votes (all player counts):
- *  - All or none guessed storyteller → storyteller 0, everyone else +2
- *  - Otherwise → storyteller +3, correct guessers +3,
+ *  - All or none guessed storyteller -> storyteller 0, everyone else +2
+ *  - Otherwise -> storyteller +3, correct guessers +3,
  *    each non-storyteller card gets +1 per vote received (capped at 3)
  *
  * Secondary votes (7+ players only, applied after primary scoring):
- *  - Lands on storyteller's card → voter +1
- *  - Lands on another player's card → card owner +1
+ *  - Lands on storyteller's card -> voter +1
+ *  - Lands on another player's card -> card owner +1
  *
  * Cap: no player earns more than maxPointsPerRound in a single round.
  */
@@ -57,7 +57,6 @@ export function computeScores(input: ScoringInput): ScoreDelta {
     delta[storytellerId] += 3;
     for (const vid of correctVoters) delta[vid] += 3;
 
-    // +1 per vote on non-storyteller cards, capped at 3
     const votesPerSub: Record<string, number> = {};
     for (const subId of Object.values(primaryVotes)) {
       votesPerSub[subId] = (votesPerSub[subId] ?? 0) + 1;
@@ -70,13 +69,10 @@ export function computeScores(input: ScoringInput): ScoreDelta {
     }
   }
 
-  // Secondary vote bonuses
   for (const [voterId, subId] of Object.entries(secondaryVotes)) {
     if (subId === storytellerSubmissionId) {
-      // secondary vote on storyteller card → voter gets +1
       delta[voterId] = (delta[voterId] ?? 0) + 1;
     } else {
-      // secondary vote on another card → that card's owner gets +1
       const owner = submissionOwner[subId];
       if (owner && owner !== storytellerId) {
         delta[owner] = (delta[owner] ?? 0) + 1;
@@ -84,60 +80,115 @@ export function computeScores(input: ScoringInput): ScoreDelta {
     }
   }
 
-  // Cap per-round earnings
   for (const pid of Object.keys(delta)) {
     delta[pid] = Math.min(delta[pid], maxPointsPerRound);
   }
 
   return delta;
+}
+
+export type StellaRevealOutcome = "fall" | "spark" | "super";
+
+export interface StellaRevealStep {
+  scoutId: string;
+  cardId: string;
+}
+
+export interface StellaRevealResult {
+  scoutId: string;
+  cardId: string;
+  outcome: StellaRevealOutcome;
+  /** players who also selected the card, excluding the scout */
+  matchedPlayerIds: string[];
+  /** players who earned stars on this reveal */
+  scoredPlayerIds: string[];
+  points: number;
 }
 
 export interface StellaScoringInput {
-  /** voterId -> submissionId. Inclui storyteller (que também vota). */
-  votes: Record<string, string>;
-  /** submissionId -> playerId dono da submissão. */
-  submissionOwner: Record<string, string>;
-  /** todos os jogadores da partida (todos votam e submetem em Stella). */
+  /** all players in seat order */
   playerIds: string[];
-  /** teto de pontos por jogador por rodada. */
-  maxPointsPerRound: number;
+  /** playerId -> secretly selected card ids */
+  selections: Record<string, string[]>;
+  /** cards revealed by scouts, in order */
+  revealOrder: StellaRevealStep[];
+  /** officially at most one player, but an array keeps the function flexible */
+  inDarkPlayerIds?: string[];
 }
 
 /**
- * Stella mode scoring (consenso):
- *  - Cada votante ganha (n_outros_que_votaram_no_mesmo) pontos.
- *    Voto sozinho = 0; com mais 1 = 1pt; com mais 2 = 2pts; etc.
- *  - Dono da carta ganha +1 por voto recebido.
- *  - Cap por rodada: maxPointsPerRound.
+ * Stella scoring:
+ *  - Fall: no other player selected the scout's card; the scout stops scoring.
+ *  - Super-Spark: exactly one other player selected it; active involved players score 3.
+ *  - Spark: at least two other players selected it; active involved players score 2.
+ *  - Fallen players still count as matches, but no longer gain stars.
+ *  - A player in the dark who falls loses 1 star per scored Spark/Super-Spark.
  */
-export function computeStellaScores(input: StellaScoringInput): ScoreDelta {
-  const { votes, submissionOwner, playerIds, maxPointsPerRound } = input;
+export function computeStellaScores(input: StellaScoringInput): {
+  delta: ScoreDelta;
+  fallen: Record<string, boolean>;
+  revealResults: StellaRevealResult[];
+} {
+  const { playerIds, selections, revealOrder, inDarkPlayerIds = [] } = input;
 
   const delta: ScoreDelta = {};
-  for (const pid of playerIds) delta[pid] = 0;
+  const fallen: Record<string, boolean> = {};
+  const scoredEvents: Record<string, number> = {};
+  const revealResults: StellaRevealResult[] = [];
+  const inDark = new Set(inDarkPlayerIds);
 
-  const voteCount: Record<string, number> = {};
-  for (const subId of Object.values(votes)) {
-    voteCount[subId] = (voteCount[subId] ?? 0) + 1;
+  for (const pid of playerIds) {
+    delta[pid] = 0;
+    fallen[pid] = false;
+    scoredEvents[pid] = 0;
   }
 
-  // Voter consensus: each voter who picked sub S gets (count - 1) points
-  for (const [voterId, subId] of Object.entries(votes)) {
-    const consensus = (voteCount[subId] ?? 0) - 1;
-    delta[voterId] = (delta[voterId] ?? 0) + consensus;
+  for (const step of revealOrder) {
+    const selectedPlayerIds = playerIds.filter((pid) =>
+      (selections[pid] ?? []).includes(step.cardId)
+    );
+    const matchedPlayerIds = selectedPlayerIds.filter((pid) => pid !== step.scoutId);
+
+    if (matchedPlayerIds.length === 0) {
+      fallen[step.scoutId] = true;
+      revealResults.push({
+        ...step,
+        outcome: "fall",
+        matchedPlayerIds,
+        scoredPlayerIds: [],
+        points: 0,
+      });
+      continue;
+    }
+
+    const outcome: StellaRevealOutcome =
+      matchedPlayerIds.length === 1 ? "super" : "spark";
+    const points = outcome === "super" ? 3 : 2;
+    const scoredPlayerIds = selectedPlayerIds.filter((pid) => !fallen[pid]);
+
+    for (const pid of scoredPlayerIds) {
+      delta[pid] = (delta[pid] ?? 0) + points;
+      scoredEvents[pid] = (scoredEvents[pid] ?? 0) + 1;
+    }
+
+    revealResults.push({
+      ...step,
+      outcome,
+      matchedPlayerIds,
+      scoredPlayerIds,
+      points,
+    });
   }
 
-  // Owner reward: +1 per vote received on their card
-  for (const [subId, count] of Object.entries(voteCount)) {
-    const ownerId = submissionOwner[subId];
-    if (!ownerId) continue;
-    delta[ownerId] = (delta[ownerId] ?? 0) + count;
+  for (const pid of playerIds) {
+    if (inDark.has(pid) && fallen[pid]) {
+      delta[pid] = Math.max(0, delta[pid] - (scoredEvents[pid] ?? 0));
+    }
   }
 
-  for (const pid of Object.keys(delta)) {
-    delta[pid] = Math.min(delta[pid], maxPointsPerRound);
-    if (delta[pid] < 0) delta[pid] = 0;
-  }
+  return { delta, fallen, revealResults };
+}
 
-  return delta;
+export function isStellaFinalRound(roundNumber: number) {
+  return roundNumber >= 4;
 }

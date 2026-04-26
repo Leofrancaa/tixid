@@ -47,12 +47,46 @@ export interface VoteRow {
   is_secondary: boolean;
 }
 
+export interface StellaRoundCardRow {
+  id: string;
+  round_id: string;
+  card_id: string;
+  position: number;
+}
+
+export interface StellaPlayerRoundRow {
+  id: string;
+  round_id: string;
+  player_id: string;
+  submitted_at: string | null;
+  selection_count: number | null;
+  in_dark: boolean;
+  fallen: boolean;
+  is_current_scout: boolean;
+  score_delta: number;
+}
+
+export interface StellaRevealRow {
+  id: string;
+  round_id: string;
+  scout_id: string;
+  card_id: string;
+  reveal_order: number;
+  outcome: "fall" | "spark" | "super";
+  matched_player_ids: string[];
+  scored_player_ids: string[];
+  created_at: string;
+}
+
 export function useGameRealtime(gameId: string) {
   const [game, setGame] = useState<GameRow | null>(null);
   const [players, setPlayers] = useState<PublicPlayer[]>([]);
   const [round, setRound] = useState<RoundRow | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [votes, setVotes] = useState<VoteRow[]>([]);
+  const [stellaCards, setStellaCards] = useState<StellaRoundCardRow[]>([]);
+  const [stellaPlayerRounds, setStellaPlayerRounds] = useState<StellaPlayerRoundRow[]>([]);
+  const [stellaReveals, setStellaReveals] = useState<StellaRevealRow[]>([]);
 
   const refetch = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
@@ -81,12 +115,63 @@ export function useGameRealtime(gameId: string) {
       ]);
       if (subs.data) setSubmissions(subs.data as SubmissionRow[]);
       if (vts.data) setVotes(vts.data as VoteRow[]);
+      const [stellaGrid, stellaStates, stellaRevealRows] = await Promise.all([
+        supabase
+          .from("stella_round_cards")
+          .select("*")
+          .eq("round_id", r.data.id)
+          .order("position"),
+        supabase
+          .from("stella_player_rounds")
+          .select("*")
+          .eq("round_id", r.data.id),
+        supabase
+          .from("stella_reveals")
+          .select("*")
+          .eq("round_id", r.data.id)
+          .order("reveal_order"),
+      ]);
+      if (stellaGrid.data) setStellaCards(stellaGrid.data as StellaRoundCardRow[]);
+      if (stellaStates.data)
+        setStellaPlayerRounds(stellaStates.data as StellaPlayerRoundRow[]);
+      if (stellaRevealRows.data)
+        setStellaReveals(stellaRevealRows.data as StellaRevealRow[]);
+    } else {
+      setRound(null);
+      setSubmissions([]);
+      setVotes([]);
+      setStellaCards([]);
+      setStellaPlayerRounds([]);
+      setStellaReveals([]);
     }
   }, [gameId]);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     refetch();
+
+    function refetchStellaRound(roundId: string) {
+      Promise.all([
+        supabase
+          .from("stella_round_cards")
+          .select("*")
+          .eq("round_id", roundId)
+          .order("position"),
+        supabase
+          .from("stella_player_rounds")
+          .select("*")
+          .eq("round_id", roundId),
+        supabase
+          .from("stella_reveals")
+          .select("*")
+          .eq("round_id", roundId)
+          .order("reveal_order"),
+      ]).then(([cards, states, reveals]) => {
+        if (cards.data) setStellaCards(cards.data as StellaRoundCardRow[]);
+        if (states.data) setStellaPlayerRounds(states.data as StellaPlayerRoundRow[]);
+        if (reveals.data) setStellaReveals(reveals.data as StellaRevealRow[]);
+      });
+    }
 
     const channel = supabase
       .channel(`game:${gameId}`)
@@ -115,6 +200,7 @@ export function useGameRealtime(gameId: string) {
                 setRound((cur) =>
                   !cur || r.round_number >= cur.round_number ? r : cur
                 );
+                refetchStellaRound(r.id);
               });
           }
         }
@@ -150,6 +236,7 @@ export function useGameRealtime(gameId: string) {
             if (!cur || row.round_number >= cur.round_number) return row;
             return cur;
           });
+          refetchStellaRound(row.id);
           // On reveal, refetch votes from DB so is_secondary is authoritative
           if (row.phase === "reveal") {
             supabase
@@ -212,6 +299,36 @@ export function useGameRealtime(gameId: string) {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "stella_round_cards" },
+        (payload) => {
+          const rid =
+            (payload.new as StellaRoundCardRow)?.round_id ??
+            (payload.old as StellaRoundCardRow)?.round_id;
+          if (rid) refetchStellaRound(rid);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "stella_player_rounds" },
+        (payload) => {
+          const rid =
+            (payload.new as StellaPlayerRoundRow)?.round_id ??
+            (payload.old as StellaPlayerRoundRow)?.round_id;
+          if (rid) refetchStellaRound(rid);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "stella_reveals" },
+        (payload) => {
+          const rid =
+            (payload.new as StellaRevealRow)?.round_id ??
+            (payload.old as StellaRevealRow)?.round_id;
+          if (rid) refetchStellaRound(rid);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -220,5 +337,15 @@ export function useGameRealtime(gameId: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
 
-  return { game, players, round, submissions, votes, refetch };
+  return {
+    game,
+    players,
+    round,
+    submissions,
+    votes,
+    stellaCards,
+    stellaPlayerRounds,
+    stellaReveals,
+    refetch,
+  };
 }

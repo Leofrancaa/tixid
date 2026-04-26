@@ -4,6 +4,9 @@ import type {
   PublicPlayer,
   RoundRow,
   SubmissionRow,
+  StellaPlayerRoundRow,
+  StellaRevealRow,
+  StellaRoundCardRow,
   VoteRow,
 } from "@/hooks/useGameRealtime";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -18,6 +21,7 @@ import SubmitPhase from "./phases/SubmitPhase";
 import VotePhase from "./phases/VotePhase";
 import RevealPhase from "./phases/RevealPhase";
 import EndScreen from "./phases/EndScreen";
+import StellaPhase from "./phases/StellaPhase";
 
 type ItemMap = Record<string, DeckItemData>;
 
@@ -29,6 +33,10 @@ export default function GameBoard({
   round,
   submissions,
   votes,
+  stellaCards,
+  stellaPlayerRounds,
+  stellaReveals,
+  stellaSelectionIds,
   hand,
   gameStatus,
   targetScore,
@@ -41,6 +49,10 @@ export default function GameBoard({
   round: RoundRow | null;
   submissions: SubmissionRow[];
   votes: VoteRow[];
+  stellaCards: StellaRoundCardRow[];
+  stellaPlayerRounds: StellaPlayerRoundRow[];
+  stellaReveals: StellaRevealRow[];
+  stellaSelectionIds: string[];
   hand: HandCard[];
   gameStatus: string;
   targetScore: number;
@@ -48,6 +60,8 @@ export default function GameBoard({
 }) {
   const [clue, setClue] = useState("");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [selectedStellaCards, setSelectedStellaCards] = useState<string[]>([]);
+  const [myStellaSelectionIds, setMyStellaSelectionIds] = useState<string[]>(stellaSelectionIds);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [itemMap, setItemMap] = useState<ItemMap>({});
@@ -55,9 +69,16 @@ export default function GameBoard({
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
   const [endingGame, setEndingGame] = useState(false);
 
+  useEffect(() => {
+    setMyStellaSelectionIds(stellaSelectionIds);
+  }, [stellaSelectionIds]);
+
   // Prefetch submission item data (image url or question text) based on mode
   useEffect(() => {
-    const ids = submissions.map((s) => s.card_id).filter(Boolean) as string[];
+    const ids = [
+      ...submissions.map((s) => s.card_id),
+      ...stellaCards.map((c) => c.card_id),
+    ].filter(Boolean) as string[];
     if (!ids.length) return;
     const missing = ids.filter((id) => !itemMap[id]);
     if (!missing.length) return;
@@ -93,7 +114,7 @@ export default function GameBoard({
           });
         });
     }
-  }, [submissions, itemMap, mode]);
+  }, [submissions, stellaCards, itemMap, mode]);
 
   if (!round) return <RoundSkeleton />;
 
@@ -141,6 +162,35 @@ export default function GameBoard({
     else setSelectedCard(null);
   }
 
+  async function doStellaSelect() {
+    if (selectedStellaCards.length < 1 || selectedStellaCards.length > 10) {
+      return setErr("Escolha de 1 a 10 cartas");
+    }
+    setBusy(true); setErr(null);
+    const res = await fetch(`/api/rounds/${round!.id}/stella/select`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cardIds: selectedStellaCards }),
+    });
+    setBusy(false);
+    if (!res.ok) setErr((await res.json()).error ?? "erro");
+    else {
+      setMyStellaSelectionIds(selectedStellaCards);
+      setSelectedStellaCards([]);
+    }
+  }
+
+  async function doStellaReveal(cardId: string) {
+    setBusy(true); setErr(null);
+    const res = await fetch(`/api/rounds/${round!.id}/stella/reveal`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cardId }),
+    });
+    setBusy(false);
+    if (!res.ok) setErr((await res.json()).error ?? "erro");
+  }
+
   async function doVote(submissionId: string, isSecondary = false) {
     setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/vote`, {
@@ -179,9 +229,9 @@ export default function GameBoard({
 
   const phaseLabel: Record<string, string> = {
     clue: mode === "questions" ? "Pergunta + Resposta" : mode === "stella" ? "Definir Tema" : "Fase da Dica",
-    submitting: mode === "questions" ? "Escolha de Pergunta" : "Escolha de Cartas",
-    voting: "Votação",
-    reveal: "Revelação",
+    submitting: mode === "stella" ? "Seleção Secreta" : mode === "questions" ? "Escolha de Pergunta" : "Escolha de Cartas",
+    voting: mode === "stella" ? "Revelação Stella" : "Votação",
+    reveal: mode === "stella" ? "Pontuação Stella" : "Revelação",
     finished: "Fim de Jogo",
   };
 
@@ -254,6 +304,25 @@ export default function GameBoard({
         <div className="mt-5">
           {gameStatus === "finished" ? (
             <EndScreen players={players} code={code} isHost={isHost} onError={setErr} />
+          ) : mode === "stella" && round.phase !== "clue" ? (
+            <StellaPhase
+              round={round}
+              players={players}
+              myPlayerId={myPlayerId}
+              stellaCards={stellaCards}
+              playerRounds={stellaPlayerRounds}
+              reveals={stellaReveals}
+              itemMap={itemMap}
+              selected={selectedStellaCards}
+              setSelected={setSelectedStellaCards}
+              mySelectionIds={myStellaSelectionIds}
+              onSelect={doStellaSelect}
+              onReveal={doStellaReveal}
+              onNext={doNext}
+              busy={busy}
+              isHost={isHost}
+              onZoom={setZoomedItem}
+            />
           ) : round.phase === "clue" ? (
             <CluePhase
               imStoryteller={imStoryteller}

@@ -8,9 +8,13 @@ import {
   roundSubmissions,
   roundVotes,
   rounds,
+  stellaPlayerRounds,
+  stellaReveals,
+  stellaRoundCards,
+  stellaSelections,
 } from "@/lib/db/schema";
 import { HAND_SIZE, shuffle } from "./deck";
-import { computeScores, computeStellaScores } from "./scoring";
+import { computeScores, isStellaFinalRound } from "./scoring";
 
 export type GameMode = "classic" | "questions" | "stella";
 
@@ -19,6 +23,12 @@ export class GameError extends Error {
     super(message);
   }
 }
+
+const STELLA_GRID_SIZE = 15;
+const STELLA_ROW_SIZE = 5;
+const STELLA_TOTAL_ROUNDS = 4;
+const STELLA_MIN_SELECTIONS = 1;
+const STELLA_MAX_SELECTIONS = 10;
 
 async function getGamePlayers(gameId: string) {
   return db
@@ -56,6 +66,69 @@ async function returnToQueue(gameId: string, cardIds: string[]): Promise<string[
   return newQueue;
 }
 
+async function initStellaRound(
+  roundId: string,
+  players: Awaited<ReturnType<typeof getGamePlayers>>,
+  gridCardIds: string[]
+) {
+  await db.insert(stellaRoundCards).values(
+    gridCardIds.map((cardId, position) => ({ roundId, cardId, position }))
+  );
+  await db.insert(stellaPlayerRounds).values(
+    players.map((player) => ({ roundId, playerId: player.id }))
+  );
+}
+
+async function getStellaRoundGrid(roundId: string) {
+  return db
+    .select()
+    .from(stellaRoundCards)
+    .where(eq(stellaRoundCards.roundId, roundId))
+    .orderBy(stellaRoundCards.position);
+}
+
+async function getStellaSelectionMap(roundId: string) {
+  const rows = await db
+    .select()
+    .from(stellaSelections)
+    .where(eq(stellaSelections.roundId, roundId));
+  const map: Record<string, string[]> = {};
+  for (const row of rows) {
+    map[row.playerId] ??= [];
+    map[row.playerId].push(row.cardId);
+  }
+  return map;
+}
+
+function findNextStellaScout({
+  players,
+  playerRounds,
+  selectionMap,
+  revealedCardIds,
+  afterPlayerId,
+}: {
+  players: Awaited<ReturnType<typeof getGamePlayers>>;
+  playerRounds: { playerId: string; fallen: boolean }[];
+  selectionMap: Record<string, string[]>;
+  revealedCardIds: Set<string>;
+  afterPlayerId: string;
+}) {
+  const fallenByPlayer = new Map(playerRounds.map((row) => [row.playerId, row.fallen]));
+  const startIdx = players.findIndex((p) => p.id === afterPlayerId);
+  if (startIdx < 0) return null;
+
+  for (let offset = 1; offset <= players.length; offset++) {
+    const player = players[(startIdx + offset) % players.length];
+    if (fallenByPlayer.get(player.id)) continue;
+    const hasUnrevealedSelection = (selectionMap[player.id] ?? []).some(
+      (cardId) => !revealedCardIds.has(cardId)
+    );
+    if (hasUnrevealedSelection) return player.id;
+  }
+
+  return null;
+}
+
 export async function startGame(gameId: string) {
   const [game] = await db.select().from(games).where(eq(games.id, gameId));
   if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
@@ -63,7 +136,10 @@ export async function startGame(gameId: string) {
   const players = await getGamePlayers(gameId);
   if (players.length < 3) throw new GameError("NOT_ENOUGH_PLAYERS", "Mín. 3 jogadores");
 
-  const needed = players.length * HAND_SIZE;
+  const needed =
+    game.mode === "stella"
+      ? STELLA_GRID_SIZE + STELLA_ROW_SIZE * (STELLA_TOTAL_ROUNDS - 1)
+      : players.length * HAND_SIZE;
   const deckIds = await getDeckIds(game.mode);
   if (deckIds.length < needed) {
     const label = game.mode === "questions" ? "perguntas" : "cartas";
@@ -74,24 +150,31 @@ export async function startGame(gameId: string) {
   }
 
   const queue = await initQueue(gameId, game.mode);
-
-  for (let i = 0; i < players.length; i++) {
-    const hand = queue.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE);
-    await db
-      .update(gamePlayers)
-      .set({ hand })
-      .where(eq(gamePlayers.id, players[i].id));
-  }
-  await db
-    .update(games)
-    .set({ cardQueue: queue.slice(players.length * HAND_SIZE) })
-    .where(eq(games.id, gameId));
-
   const storyteller = players[0];
   const [round] = await db
     .insert(rounds)
     .values({ gameId, roundNumber: 1, storytellerId: storyteller.id, phase: "clue" })
     .returning();
+
+  if (game.mode === "stella") {
+    await initStellaRound(round.id, players, queue.slice(0, STELLA_GRID_SIZE));
+    await db
+      .update(games)
+      .set({ cardQueue: queue.slice(STELLA_GRID_SIZE) })
+      .where(eq(games.id, gameId));
+  } else {
+    for (let i = 0; i < players.length; i++) {
+      const hand = queue.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE);
+      await db
+        .update(gamePlayers)
+        .set({ hand })
+        .where(eq(gamePlayers.id, players[i].id));
+    }
+    await db
+      .update(games)
+      .set({ cardQueue: queue.slice(players.length * HAND_SIZE) })
+      .where(eq(games.id, gameId));
+  }
 
   await db
     .update(games)
@@ -160,9 +243,10 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
 
   const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
   const isStella = game.mode === "stella";
+  if (isStella)
+    throw new GameError("STELLA_ONLY", "Use a seleÃ§Ã£o Stella nesta rodada");
 
   // In classic/questions, storyteller already submitted their card during clue.
-  // In stella, storyteller submits like everyone else.
   if (!isStella && round.storytellerId === playerId)
     throw new GameError("IS_STORYTELLER", "Storyteller já enviou sua carta");
 
@@ -202,6 +286,245 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
   }
 }
 
+export async function submitStellaSelection(
+  roundId: string,
+  playerId: string,
+  cardIds: string[]
+) {
+  const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
+  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nÃ£o encontrada");
+  if (round.phase !== "submitting") throw new GameError("WRONG_PHASE", "Fase invÃ¡lida");
+
+  const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
+  if (game.mode !== "stella")
+    throw new GameError("NOT_STELLA", "Rodada nÃ£o Ã© Stella");
+
+  const players = await getGamePlayers(round.gameId);
+  if (!players.some((p) => p.id === playerId))
+    throw new GameError("NOT_PLAYER", "Jogador invÃ¡lido");
+
+  const uniqueCardIds = [...new Set(cardIds)];
+  if (
+    uniqueCardIds.length < STELLA_MIN_SELECTIONS ||
+    uniqueCardIds.length > STELLA_MAX_SELECTIONS
+  ) {
+    throw new GameError("BAD_SELECTION_COUNT", "Escolha de 1 a 10 cartas");
+  }
+
+  const grid = await getStellaRoundGrid(roundId);
+  const gridIds = new Set(grid.map((c) => c.cardId));
+  if (uniqueCardIds.some((id) => !gridIds.has(id)))
+    throw new GameError("CARD_NOT_IN_GRID", "Carta fora da grade Stella");
+
+  const [publicState] = await db
+    .select()
+    .from(stellaPlayerRounds)
+    .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, playerId)));
+  if (!publicState)
+    throw new GameError("PLAYER_STATE_NOT_FOUND", "Estado Stella nÃ£o encontrado");
+  if (publicState.submittedAt)
+    throw new GameError("ALREADY_SUBMITTED", "VocÃª jÃ¡ enviou suas escolhas");
+
+  await db.insert(stellaSelections).values(
+    uniqueCardIds.map((cardId) => ({ roundId, playerId, cardId }))
+  );
+  await db
+    .update(stellaPlayerRounds)
+    .set({ submittedAt: new Date() })
+    .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, playerId)));
+
+  const publicRows = await db
+    .select()
+    .from(stellaPlayerRounds)
+    .where(eq(stellaPlayerRounds.roundId, roundId));
+  const allSubmitted = publicRows.every((row) =>
+    row.playerId === playerId ? true : !!row.submittedAt
+  );
+  if (!allSubmitted) return;
+
+  const selectionMap = await getStellaSelectionMap(roundId);
+  const counts = players.map((p) => ({
+    playerId: p.id,
+    count: selectionMap[p.id]?.length ?? 0,
+  }));
+  const maxCount = Math.max(...counts.map((c) => c.count));
+  const leaders = counts.filter((c) => c.count === maxCount);
+  const darkPlayerId = leaders.length === 1 ? leaders[0].playerId : null;
+
+  for (const row of counts) {
+    await db
+      .update(stellaPlayerRounds)
+      .set({
+        selectionCount: row.count,
+        inDark: row.playerId === darkPlayerId,
+        isCurrentScout: row.playerId === round.storytellerId,
+      })
+      .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, row.playerId)));
+  }
+
+  await db.update(rounds).set({ phase: "voting" }).where(eq(rounds.id, roundId));
+}
+
+async function finishStellaReveal(roundId: string) {
+  const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
+  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nÃ£o encontrada");
+
+  const playerRows = await db
+    .select()
+    .from(stellaPlayerRounds)
+    .where(eq(stellaPlayerRounds.roundId, roundId));
+  const reveals = await db
+    .select()
+    .from(stellaReveals)
+    .where(eq(stellaReveals.roundId, roundId))
+    .orderBy(stellaReveals.revealOrder);
+
+  for (const row of playerRows) {
+    let finalDelta = row.scoreDelta;
+    if (row.inDark && row.fallen) {
+      const scoredEvents = reveals.filter((reveal) =>
+        ((reveal.scoredPlayerIds as string[]) ?? []).includes(row.playerId)
+      ).length;
+      finalDelta = Math.max(0, finalDelta - scoredEvents);
+      if (finalDelta !== row.scoreDelta) {
+        await db
+          .update(stellaPlayerRounds)
+          .set({ scoreDelta: finalDelta })
+          .where(eq(stellaPlayerRounds.id, row.id));
+      }
+    }
+
+    if (finalDelta > 0) {
+      await db
+        .update(gamePlayers)
+        .set({ score: sql`${gamePlayers.score} + ${finalDelta}` })
+        .where(eq(gamePlayers.id, row.playerId));
+    }
+  }
+
+  await db
+    .update(stellaPlayerRounds)
+    .set({ isCurrentScout: false })
+    .where(eq(stellaPlayerRounds.roundId, roundId));
+  await db
+    .update(rounds)
+    .set({ phase: "reveal", endedAt: new Date() })
+    .where(eq(rounds.id, roundId));
+}
+
+export async function revealStellaCard(roundId: string, playerId: string, cardId: string) {
+  const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
+  if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nÃ£o encontrada");
+  if (round.phase !== "voting") throw new GameError("WRONG_PHASE", "Fase invÃ¡lida");
+
+  const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
+  if (game.mode !== "stella")
+    throw new GameError("NOT_STELLA", "Rodada nÃ£o Ã© Stella");
+
+  const [currentState] = await db
+    .select()
+    .from(stellaPlayerRounds)
+    .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, playerId)));
+  if (!currentState?.isCurrentScout)
+    throw new GameError("NOT_SCOUT", "Aguarde sua vez de revelar");
+  if (currentState.fallen)
+    throw new GameError("SCOUT_FALLEN", "Jogador jÃ¡ caiu nesta rodada");
+
+  const grid = await getStellaRoundGrid(roundId);
+  if (!grid.some((c) => c.cardId === cardId))
+    throw new GameError("CARD_NOT_IN_GRID", "Carta fora da grade Stella");
+
+  const revealedRows = await db
+    .select()
+    .from(stellaReveals)
+    .where(eq(stellaReveals.roundId, roundId))
+    .orderBy(stellaReveals.revealOrder);
+  if (revealedRows.some((row) => row.cardId === cardId))
+    throw new GameError("ALREADY_REVEALED", "Carta jÃ¡ revelada");
+
+  const selectionMap = await getStellaSelectionMap(roundId);
+  if (!(selectionMap[playerId] ?? []).includes(cardId))
+    throw new GameError("CARD_NOT_SELECTED", "Revele uma carta que vocÃª marcou");
+
+  const players = await getGamePlayers(round.gameId);
+  const playerRows = await db
+    .select()
+    .from(stellaPlayerRounds)
+    .where(eq(stellaPlayerRounds.roundId, roundId));
+  const fallenBefore = new Map(playerRows.map((row) => [row.playerId, row.fallen]));
+  const selectedPlayerIds = players
+    .map((p) => p.id)
+    .filter((pid) => (selectionMap[pid] ?? []).includes(cardId));
+  const matchedPlayerIds = selectedPlayerIds.filter((pid) => pid !== playerId);
+  const outcome =
+    matchedPlayerIds.length === 0
+      ? "fall"
+      : matchedPlayerIds.length === 1
+        ? "super"
+        : "spark";
+  const points = outcome === "super" ? 3 : outcome === "spark" ? 2 : 0;
+  const scoredPlayerIds =
+    points > 0 ? selectedPlayerIds.filter((pid) => !fallenBefore.get(pid)) : [];
+
+  await db.insert(stellaReveals).values({
+    roundId,
+    scoutId: playerId,
+    cardId,
+    revealOrder: revealedRows.length + 1,
+    outcome,
+    matchedPlayerIds,
+    scoredPlayerIds,
+  });
+
+  if (outcome === "fall") {
+    await db
+      .update(stellaPlayerRounds)
+      .set({ fallen: true })
+      .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, playerId)));
+  } else {
+    for (const scoredPlayerId of scoredPlayerIds) {
+      await db
+        .update(stellaPlayerRounds)
+        .set({ scoreDelta: sql`${stellaPlayerRounds.scoreDelta} + ${points}` })
+        .where(
+          and(
+            eq(stellaPlayerRounds.roundId, roundId),
+            eq(stellaPlayerRounds.playerId, scoredPlayerId)
+          )
+        );
+    }
+  }
+
+  const updatedPlayerRows = playerRows.map((row) =>
+    row.playerId === playerId && outcome === "fall"
+      ? { ...row, fallen: true }
+      : row
+  );
+  const revealedCardIds = new Set([...revealedRows.map((row) => row.cardId), cardId]);
+  const nextScoutId = findNextStellaScout({
+    players,
+    playerRounds: updatedPlayerRows,
+    selectionMap,
+    revealedCardIds,
+    afterPlayerId: playerId,
+  });
+
+  await db
+    .update(stellaPlayerRounds)
+    .set({ isCurrentScout: false })
+    .where(eq(stellaPlayerRounds.roundId, roundId));
+
+  if (!nextScoutId) {
+    await finishStellaReveal(roundId);
+    return;
+  }
+
+  await db
+    .update(stellaPlayerRounds)
+    .set({ isCurrentScout: true })
+    .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, nextScoutId)));
+}
+
 export async function castVote(
   roundId: string,
   voterId: string,
@@ -215,6 +538,8 @@ export async function castVote(
   const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
   const isStella = game.mode === "stella";
   const isQuestions = game.mode === "questions";
+  if (isStella)
+    throw new GameError("STELLA_ONLY", "Use a revelacao Stella nesta rodada");
   const odysseyAllowed = !isStella && !isQuestions; // Odyssey só no modo clássico
 
   // In classic/questions, storyteller doesn't vote. In stella, everyone votes.
@@ -264,15 +589,7 @@ export async function castVote(
   //   questions                    → resolve quando todos os primários in (sem Odyssey)
   //   classic ≤6 voters            → resolve quando todos os primários in
   //   classic 7+ voters (Odyssey)  → host aciona manualmente
-  if (isStella) {
-    const allVotes = await db
-      .select()
-      .from(roundVotes)
-      .where(eq(roundVotes.roundId, roundId));
-    if (allVotes.length === eligibleVoters.length) {
-      await resolveRound(roundId);
-    }
-  } else if (!odysseyAllowed || eligibleVoters.length < 6) {
+  if (!odysseyAllowed || eligibleVoters.length < 6) {
     const allVotes = await db
       .select()
       .from(roundVotes)
@@ -290,6 +607,10 @@ export async function resolveRound(roundId: string) {
 
   const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
   const isStella = game.mode === "stella";
+  if (isStella) {
+    await finishStellaReveal(roundId);
+    return;
+  }
 
   const players = await getGamePlayers(round.gameId);
   const subs = await db
@@ -308,37 +629,22 @@ export async function resolveRound(roundId: string) {
     if (s.playerId === round.storytellerId) storytellerSubmissionId = s.id;
   }
 
-  let delta: Record<string, number>;
-  if (isStella) {
-    const stellaVotes: Record<string, string> = {};
-    for (const v of votes) {
-      // ignore any stray secondary votes (shouldn't exist in stella)
-      if (!v.isSecondary) stellaVotes[v.voterId] = v.submissionId;
-    }
-    delta = computeStellaScores({
-      votes: stellaVotes,
-      submissionOwner,
-      playerIds: players.map((p) => p.id),
-      maxPointsPerRound: 5,
-    });
-  } else {
-    const voters = players.filter((p) => p.id !== round.storytellerId);
-    const primaryVotesMap: Record<string, string> = {};
-    const secondaryVotesMap: Record<string, string> = {};
-    for (const v of votes) {
-      if (v.isSecondary) secondaryVotesMap[v.voterId] = v.submissionId;
-      else primaryVotesMap[v.voterId] = v.submissionId;
-    }
-    delta = computeScores({
-      storytellerId: round.storytellerId,
-      submissionOwner,
-      storytellerSubmissionId,
-      primaryVotes: primaryVotesMap,
-      secondaryVotes: secondaryVotesMap,
-      voterIds: voters.map((v) => v.id),
-      maxPointsPerRound: 5,
-    });
+  const voters = players.filter((p) => p.id !== round.storytellerId);
+  const primaryVotesMap: Record<string, string> = {};
+  const secondaryVotesMap: Record<string, string> = {};
+  for (const v of votes) {
+    if (v.isSecondary) secondaryVotesMap[v.voterId] = v.submissionId;
+    else primaryVotesMap[v.voterId] = v.submissionId;
   }
+  const delta = computeScores({
+    storytellerId: round.storytellerId,
+    submissionOwner,
+    storytellerSubmissionId,
+    primaryVotes: primaryVotesMap,
+    secondaryVotes: secondaryVotesMap,
+    voterIds: voters.map((v) => v.id),
+    maxPointsPerRound: 5,
+  });
 
   for (const [pid, d] of Object.entries(delta)) {
     if (!d) continue;
@@ -366,6 +672,49 @@ export async function nextRound(gameId: string) {
   if (round.phase !== "reveal")
     throw new GameError("WRONG_PHASE", "Rodada ainda não foi revelada");
 
+  const players = await getGamePlayers(gameId);
+
+  if (game.mode === "stella") {
+    if (isStellaFinalRound(round.roundNumber)) {
+      await db.update(games).set({ status: "finished" }).where(eq(games.id, gameId));
+      await db.update(rounds).set({ phase: "finished" }).where(eq(rounds.id, round.id));
+      return { finished: true as const };
+    }
+
+    const currentGrid = await getStellaRoundGrid(round.id);
+    const queue = (game.cardQueue as string[]) ?? [];
+    if (queue.length < STELLA_ROW_SIZE) {
+      throw new GameError("NOT_ENOUGH_CARDS", "Deck Stella sem cartas para a proxima rodada");
+    }
+
+    const rowStart = ((round.roundNumber - 1) % 3) * STELLA_ROW_SIZE;
+    const nextGrid = currentGrid.map((row) => row.cardId);
+    const replacements = queue.slice(0, STELLA_ROW_SIZE);
+    for (let i = 0; i < STELLA_ROW_SIZE; i++) {
+      nextGrid[rowStart + i] = replacements[i];
+    }
+
+    const currentIdx = players.findIndex((p) => p.id === round.storytellerId);
+    const nextStoryteller = players[(currentIdx + 1) % players.length];
+    const [newRound] = await db
+      .insert(rounds)
+      .values({
+        gameId,
+        roundNumber: round.roundNumber + 1,
+        storytellerId: nextStoryteller.id,
+        phase: "clue",
+      })
+      .returning();
+
+    await initStellaRound(newRound.id, players, nextGrid);
+    await db
+      .update(games)
+      .set({ currentRoundId: newRound.id, cardQueue: queue.slice(STELLA_ROW_SIZE) })
+      .where(eq(games.id, gameId));
+
+    return { finished: false as const, round: newRound };
+  }
+
   // Return cards played this round to back of queue
   const usedSubs = await db
     .select({ cardId: roundSubmissions.cardId })
@@ -374,7 +723,6 @@ export async function nextRound(gameId: string) {
   const updatedQueue = await returnToQueue(gameId, usedSubs.map((s) => s.cardId));
 
   // Check end of game
-  const players = await getGamePlayers(gameId);
   const maxScore = Math.max(...players.map((p) => p.score));
   if (maxScore >= game.targetScore) {
     await db.update(games).set({ status: "finished" }).where(eq(games.id, gameId));

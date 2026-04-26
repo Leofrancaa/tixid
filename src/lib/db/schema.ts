@@ -13,6 +13,11 @@ import {
 
 export const gameStatus = pgEnum("game_status", ["lobby", "playing", "finished"]);
 export const gameMode = pgEnum("game_mode", ["classic", "questions", "stella"]);
+export const stellaRevealOutcome = pgEnum("stella_reveal_outcome", [
+  "fall",
+  "spark",
+  "super",
+]);
 export const roundPhase = pgEnum("round_phase", [
   "clue",
   "submitting",
@@ -129,9 +134,98 @@ export const roundVotes = pgTable(
   })
 );
 
+export const stellaRoundCards = pgTable(
+  "stella_round_cards",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    roundId: uuid("round_id")
+      .notNull()
+      .references(() => rounds.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+  },
+  (t) => ({
+    uniqPosition: unique().on(t.roundId, t.position),
+    uniqCard: unique().on(t.roundId, t.cardId),
+  })
+);
+
+export const stellaSelections = pgTable(
+  "stella_selections",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    roundId: uuid("round_id")
+      .notNull()
+      .references(() => rounds.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => gamePlayers.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    uniqSelection: unique().on(t.roundId, t.playerId, t.cardId),
+  })
+);
+
+export const stellaPlayerRounds = pgTable(
+  "stella_player_rounds",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    roundId: uuid("round_id")
+      .notNull()
+      .references(() => rounds.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => gamePlayers.id, { onDelete: "cascade" }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    selectionCount: integer("selection_count"),
+    inDark: boolean("in_dark").notNull().default(false),
+    fallen: boolean("fallen").notNull().default(false),
+    isCurrentScout: boolean("is_current_scout").notNull().default(false),
+    scoreDelta: integer("score_delta").notNull().default(0),
+  },
+  (t) => ({
+    uniqPlayerRound: unique().on(t.roundId, t.playerId),
+  })
+);
+
+export const stellaReveals = pgTable(
+  "stella_reveals",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    roundId: uuid("round_id")
+      .notNull()
+      .references(() => rounds.id, { onDelete: "cascade" }),
+    scoutId: uuid("scout_id")
+      .notNull()
+      .references(() => gamePlayers.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    revealOrder: integer("reveal_order").notNull(),
+    outcome: stellaRevealOutcome("outcome").notNull(),
+    matchedPlayerIds: jsonb("matched_player_ids").notNull().default(sql`'[]'::jsonb`),
+    scoredPlayerIds: jsonb("scored_player_ids").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    uniqRevealOrder: unique().on(t.roundId, t.revealOrder),
+    uniqRevealCard: unique().on(t.roundId, t.cardId),
+  })
+);
+
 export type Card = typeof cards.$inferSelect;
 export type Game = typeof games.$inferSelect;
 export type GamePlayer = typeof gamePlayers.$inferSelect;
 export type Round = typeof rounds.$inferSelect;
 export type RoundSubmission = typeof roundSubmissions.$inferSelect;
 export type RoundVote = typeof roundVotes.$inferSelect;
+export type StellaRoundCard = typeof stellaRoundCards.$inferSelect;
+export type StellaSelection = typeof stellaSelections.$inferSelect;
+export type StellaPlayerRound = typeof stellaPlayerRounds.$inferSelect;
+export type StellaReveal = typeof stellaReveals.$inferSelect;

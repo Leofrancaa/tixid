@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { cards, games, gamePlayers, questions } from "@/lib/db/schema";
+import { cards, games, gamePlayers, questions, stellaSelections } from "@/lib/db/schema";
 import { readPlayerToken } from "@/lib/auth/playerToken";
 
 export async function GET(
@@ -56,6 +56,20 @@ export async function GET(
     .set({ connected: true, lastSeenAt: new Date() })
     .where(eq(gamePlayers.id, me.id));
 
+  let stellaSelectionIds: string[] = [];
+  if (game.mode === "stella" && game.currentRoundId) {
+    const rows = await db
+      .select({ cardId: stellaSelections.cardId })
+      .from(stellaSelections)
+      .where(
+        and(
+          eq(stellaSelections.roundId, game.currentRoundId),
+          eq(stellaSelections.playerId, me.id)
+        )
+      );
+    stellaSelectionIds = rows.map((row) => row.cardId);
+  }
+
   return NextResponse.json({
     player: {
       id: me.id,
@@ -71,5 +85,6 @@ export async function GET(
       mode: game.mode,
       currentRoundId: game.currentRoundId,
     },
+    stellaSelectionIds,
   });
 }
