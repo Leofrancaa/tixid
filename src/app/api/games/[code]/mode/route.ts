@@ -13,7 +13,7 @@ export async function PATCH(
 
   const body = await req.json().catch(() => ({}));
   const mode = body?.mode as string | undefined;
-  if (mode !== "classic" && mode !== "questions") {
+  if (mode !== "classic" && mode !== "questions" && mode !== "stella") {
     return NextResponse.json({ error: "modo inválido" }, { status: 400 });
   }
 

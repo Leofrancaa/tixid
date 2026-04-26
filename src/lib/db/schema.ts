@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const gameStatus = pgEnum("game_status", ["lobby", "playing", "finished"]);
-export const gameMode = pgEnum("game_mode", ["classic", "questions"]);
+export const gameMode = pgEnum("game_mode", ["classic", "questions", "stella"]);
 export const roundPhase = pgEnum("round_phase", [
   "clue",
   "submitting",

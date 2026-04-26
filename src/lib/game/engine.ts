@@ -10,7 +10,9 @@ import {
   rounds,
 } from "@/lib/db/schema";
 import { HAND_SIZE, shuffle } from "./deck";
-import { computeScores } from "./scoring";
+import { computeScores, computeStellaScores } from "./scoring";
+
+export type GameMode = "classic" | "questions" | "stella";
 
 export class GameError extends Error {
   constructor(public code: string, message: string) {
@@ -26,16 +28,17 @@ async function getGamePlayers(gameId: string) {
     .orderBy(gamePlayers.seatOrder);
 }
 
-async function getDeckIds(mode: "classic" | "questions"): Promise<string[]> {
+async function getDeckIds(mode: GameMode): Promise<string[]> {
   if (mode === "questions") {
     const rows = await db.select({ id: questions.id }).from(questions);
     return rows.map((r) => r.id);
   }
+  // classic and stella both use the image card deck
   const rows = await db.select({ id: cards.id }).from(cards);
   return rows.map((r) => r.id);
 }
 
-async function initQueue(gameId: string, mode: "classic" | "questions"): Promise<string[]> {
+async function initQueue(gameId: string, mode: GameMode): Promise<string[]> {
   const ids = await getDeckIds(mode);
   const shuffled = shuffle(ids);
   await db.update(games).set({ cardQueue: shuffled }).where(eq(games.id, gameId));
@@ -51,15 +54,6 @@ async function returnToQueue(gameId: string, cardIds: string[]): Promise<string[
   const newQueue = [...queue, ...cardIds];
   await db.update(games).set({ cardQueue: newQueue }).where(eq(games.id, gameId));
   return newQueue;
-}
-
-function allCardsInHands(players: { hand: unknown }[]): string[] {
-  const out: string[] = [];
-  for (const p of players) {
-    const hand = (p.hand as string[]) ?? [];
-    for (const id of hand) out.push(id);
-  }
-  return out;
 }
 
 export async function startGame(gameId: string) {
@@ -111,13 +105,27 @@ export async function submitStorytellerClue(
   roundId: string,
   playerId: string,
   clue: string,
-  cardId: string
+  cardId: string | null
 ) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
   if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada não encontrada");
   if (round.storytellerId !== playerId)
     throw new GameError("NOT_STORYTELLER", "Só o storyteller pode dar a dica");
   if (round.phase !== "clue") throw new GameError("WRONG_PHASE", "Fase inválida");
+
+  const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
+  const isStella = game.mode === "stella";
+
+  if (isStella) {
+    // Stella: storyteller só define o tema; não escolhe carta agora.
+    await db
+      .update(rounds)
+      .set({ clue, phase: "submitting" })
+      .where(eq(rounds.id, roundId));
+    return null;
+  }
+
+  if (!cardId) throw new GameError("NO_CARD", "Escolha uma carta");
 
   const [player] = await db
     .select()
@@ -149,7 +157,13 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
   if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada não encontrada");
   if (round.phase !== "submitting") throw new GameError("WRONG_PHASE", "Fase inválida");
-  if (round.storytellerId === playerId)
+
+  const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
+  const isStella = game.mode === "stella";
+
+  // In classic/questions, storyteller already submitted their card during clue.
+  // In stella, storyteller submits like everyone else.
+  if (!isStella && round.storytellerId === playerId)
     throw new GameError("IS_STORYTELLER", "Storyteller já enviou sua carta");
 
   const [player] = await db
@@ -168,13 +182,15 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
   await db.insert(roundSubmissions).values({ roundId, playerId, cardId });
 
   const players = await getGamePlayers(round.gameId);
-  const nonStory = players.filter((p) => p.id !== round.storytellerId);
+  const expected = isStella ? players.length : players.length; // every player has 1 sub by end
+  // Classic: storyteller submitted in clue → expected = nonStoryCount + 1 = players.length
+  // Stella : everyone submits in this phase                       → expected = players.length
   const subs = await db
     .select()
     .from(roundSubmissions)
     .where(eq(roundSubmissions.roundId, roundId));
 
-  if (subs.length === nonStory.length + 1) {
+  if (subs.length === expected) {
     const shuffled = shuffle(subs);
     for (let i = 0; i < shuffled.length; i++) {
       await db
@@ -195,7 +211,14 @@ export async function castVote(
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
   if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada não encontrada");
   if (round.phase !== "voting") throw new GameError("WRONG_PHASE", "Fase inválida");
-  if (round.storytellerId === voterId)
+
+  const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
+  const isStella = game.mode === "stella";
+  const isQuestions = game.mode === "questions";
+  const odysseyAllowed = !isStella && !isQuestions; // Odyssey só no modo clássico
+
+  // In classic/questions, storyteller doesn't vote. In stella, everyone votes.
+  if (!isStella && round.storytellerId === voterId)
     throw new GameError("STORYTELLER_CANT_VOTE", "Storyteller não vota");
 
   const [sub] = await db
@@ -208,13 +231,17 @@ export async function castVote(
     throw new GameError("CANT_VOTE_OWN", "Não pode votar na própria carta");
 
   const players = await getGamePlayers(round.gameId);
-  const voters = players.filter((p) => p.id !== round.storytellerId);
+  const eligibleVoters = isStella
+    ? players
+    : players.filter((p) => p.id !== round.storytellerId);
 
-  // Secondary votes only available for 7+ player games
-  if (isSecondary && voters.length < 6)
-    throw new GameError("NO_SECONDARY", "Voto secundário só disponível com 7+ jogadores");
+  if (isSecondary) {
+    if (!odysseyAllowed)
+      throw new GameError("NO_SECONDARY", "Modo atual não tem voto secundário");
+    if (eligibleVoters.length < 6)
+      throw new GameError("NO_SECONDARY", "Voto secundário só disponível com 7+ jogadores");
+  }
 
-  // Fetch existing votes from this voter to enforce constraints
   const myExistingVotes = await db
     .select()
     .from(roundVotes)
@@ -232,16 +259,26 @@ export async function castVote(
 
   await db.insert(roundVotes).values({ roundId, voterId, submissionId, isSecondary });
 
-  // For ≤5 voters (≤6 players, non-Odyssey): auto-resolve when all primary votes are in
-  // For 6+ voters (7+ players, Odyssey mode): host manually triggers reveal so everyone
-  // has a chance to cast their optional secondary vote
-  if (voters.length < 6) {
+  // Auto-resolve thresholds:
+  //   stella                       → resolve quando todos votaram
+  //   questions                    → resolve quando todos os primários in (sem Odyssey)
+  //   classic ≤6 voters            → resolve quando todos os primários in
+  //   classic 7+ voters (Odyssey)  → host aciona manualmente
+  if (isStella) {
+    const allVotes = await db
+      .select()
+      .from(roundVotes)
+      .where(eq(roundVotes.roundId, roundId));
+    if (allVotes.length === eligibleVoters.length) {
+      await resolveRound(roundId);
+    }
+  } else if (!odysseyAllowed || eligibleVoters.length < 6) {
     const allVotes = await db
       .select()
       .from(roundVotes)
       .where(eq(roundVotes.roundId, roundId));
     const primaryVotes = allVotes.filter((v) => !v.isSecondary);
-    if (primaryVotes.length === voters.length) {
+    if (primaryVotes.length === eligibleVoters.length) {
       await resolveRound(roundId);
     }
   }
@@ -251,8 +288,10 @@ export async function resolveRound(roundId: string) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
   if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada não encontrada");
 
+  const [game] = await db.select().from(games).where(eq(games.id, round.gameId));
+  const isStella = game.mode === "stella";
+
   const players = await getGamePlayers(round.gameId);
-  const voters = players.filter((p) => p.id !== round.storytellerId);
   const subs = await db
     .select()
     .from(roundSubmissions)
@@ -268,22 +307,38 @@ export async function resolveRound(roundId: string) {
     submissionOwner[s.id] = s.playerId;
     if (s.playerId === round.storytellerId) storytellerSubmissionId = s.id;
   }
-  const primaryVotesMap: Record<string, string> = {};
-  const secondaryVotesMap: Record<string, string> = {};
-  for (const v of votes) {
-    if (v.isSecondary) secondaryVotesMap[v.voterId] = v.submissionId;
-    else primaryVotesMap[v.voterId] = v.submissionId;
-  }
 
-  const delta = computeScores({
-    storytellerId: round.storytellerId,
-    submissionOwner,
-    storytellerSubmissionId,
-    primaryVotes: primaryVotesMap,
-    secondaryVotes: secondaryVotesMap,
-    voterIds: voters.map((v) => v.id),
-    maxPointsPerRound: 5,
-  });
+  let delta: Record<string, number>;
+  if (isStella) {
+    const stellaVotes: Record<string, string> = {};
+    for (const v of votes) {
+      // ignore any stray secondary votes (shouldn't exist in stella)
+      if (!v.isSecondary) stellaVotes[v.voterId] = v.submissionId;
+    }
+    delta = computeStellaScores({
+      votes: stellaVotes,
+      submissionOwner,
+      playerIds: players.map((p) => p.id),
+      maxPointsPerRound: 5,
+    });
+  } else {
+    const voters = players.filter((p) => p.id !== round.storytellerId);
+    const primaryVotesMap: Record<string, string> = {};
+    const secondaryVotesMap: Record<string, string> = {};
+    for (const v of votes) {
+      if (v.isSecondary) secondaryVotesMap[v.voterId] = v.submissionId;
+      else primaryVotesMap[v.voterId] = v.submissionId;
+    }
+    delta = computeScores({
+      storytellerId: round.storytellerId,
+      submissionOwner,
+      storytellerSubmissionId,
+      primaryVotes: primaryVotesMap,
+      secondaryVotes: secondaryVotesMap,
+      voterIds: voters.map((v) => v.id),
+      maxPointsPerRound: 5,
+    });
+  }
 
   for (const [pid, d] of Object.entries(delta)) {
     if (!d) continue;

@@ -17,7 +17,7 @@ interface MeData {
   game: {
     id: string;
     status: string;
-    mode: "classic" | "questions";
+    mode: "classic" | "questions" | "stella";
     currentRoundId: string | null;
   };
 }

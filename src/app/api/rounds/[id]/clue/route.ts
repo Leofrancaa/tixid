@@ -6,7 +6,10 @@ import { games, gamePlayers, rounds } from "@/lib/db/schema";
 import { readPlayerToken } from "@/lib/auth/playerToken";
 import { submitStorytellerClue, GameError } from "@/lib/game/engine";
 
-const Body = z.object({ clue: z.string().min(1).max(100), cardId: z.string().uuid() });
+const Body = z.object({
+  clue: z.string().min(1).max(100),
+  cardId: z.string().uuid().nullable().optional(),
+});
 
 export async function POST(
   req: Request,
@@ -28,7 +31,7 @@ export async function POST(
     return NextResponse.json({ error: "não é jogador" }, { status: 403 });
 
   try {
-    await submitStorytellerClue(id, me.id, body.data.clue, body.data.cardId);
+    await submitStorytellerClue(id, me.id, body.data.clue, body.data.cardId ?? null);
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof GameError)

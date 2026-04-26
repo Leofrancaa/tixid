@@ -25,7 +25,7 @@ export default function RevealPhase({
   onNext: () => void;
   busy: boolean;
   onZoom: (item: DeckItemData) => void;
-  mode: "classic" | "questions";
+  mode: "classic" | "questions" | "stella";
 }) {
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]));
   const votesFor: Record<string, { player: PublicPlayer; isSecondary: boolean }[]> = {};
@@ -48,7 +48,8 @@ export default function RevealPhase({
       </p>
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
         {ordered.map((s) => {
-          const isStory = s.card_id === storytellerCardId;
+          // In Stella mode there is no "storyteller card" — everyone plays equal.
+          const isStory = mode !== "stella" && s.card_id === storytellerCardId;
           const owner = playerById[s.player_id];
           const item = itemMap[s.card_id] ?? fallbackItem;
           return (

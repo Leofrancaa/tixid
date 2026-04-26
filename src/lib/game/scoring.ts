@@ -91,3 +91,53 @@ export function computeScores(input: ScoringInput): ScoreDelta {
 
   return delta;
 }
+
+export interface StellaScoringInput {
+  /** voterId -> submissionId. Inclui storyteller (que também vota). */
+  votes: Record<string, string>;
+  /** submissionId -> playerId dono da submissão. */
+  submissionOwner: Record<string, string>;
+  /** todos os jogadores da partida (todos votam e submetem em Stella). */
+  playerIds: string[];
+  /** teto de pontos por jogador por rodada. */
+  maxPointsPerRound: number;
+}
+
+/**
+ * Stella mode scoring (consenso):
+ *  - Cada votante ganha (n_outros_que_votaram_no_mesmo) pontos.
+ *    Voto sozinho = 0; com mais 1 = 1pt; com mais 2 = 2pts; etc.
+ *  - Dono da carta ganha +1 por voto recebido.
+ *  - Cap por rodada: maxPointsPerRound.
+ */
+export function computeStellaScores(input: StellaScoringInput): ScoreDelta {
+  const { votes, submissionOwner, playerIds, maxPointsPerRound } = input;
+
+  const delta: ScoreDelta = {};
+  for (const pid of playerIds) delta[pid] = 0;
+
+  const voteCount: Record<string, number> = {};
+  for (const subId of Object.values(votes)) {
+    voteCount[subId] = (voteCount[subId] ?? 0) + 1;
+  }
+
+  // Voter consensus: each voter who picked sub S gets (count - 1) points
+  for (const [voterId, subId] of Object.entries(votes)) {
+    const consensus = (voteCount[subId] ?? 0) - 1;
+    delta[voterId] = (delta[voterId] ?? 0) + consensus;
+  }
+
+  // Owner reward: +1 per vote received on their card
+  for (const [subId, count] of Object.entries(voteCount)) {
+    const ownerId = submissionOwner[subId];
+    if (!ownerId) continue;
+    delta[ownerId] = (delta[ownerId] ?? 0) + count;
+  }
+
+  for (const pid of Object.keys(delta)) {
+    delta[pid] = Math.min(delta[pid], maxPointsPerRound);
+    if (delta[pid] < 0) delta[pid] = 0;
+  }
+
+  return delta;
+}

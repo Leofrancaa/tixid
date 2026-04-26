@@ -14,7 +14,7 @@ export default function Lobby({
   code: string;
   players: PublicPlayer[];
   isHost: boolean;
-  mode: "classic" | "questions";
+  mode: "classic" | "questions" | "stella";
   onStarted?: () => void;
 }) {
   const [starting, setStarting] = useState(false);
@@ -24,7 +24,7 @@ export default function Lobby({
   const [closing, setClosing] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  async function setMode(next: "classic" | "questions") {
+  async function setMode(next: "classic" | "questions" | "stella") {
     if (next === mode || switching) return;
     setSwitching(true);
     const res = await fetch(`/api/games/${code}/mode`, {
@@ -191,7 +191,7 @@ export default function Lobby({
             Modo de jogo
           </p>
           {isHost ? (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button
                 onClick={() => setMode("classic")}
                 disabled={switching}
@@ -203,7 +203,7 @@ export default function Lobby({
               >
                 <div className="font-display text-sm text-parchment/90">🃏 Cartas</div>
                 <div className="mt-0.5 font-serif text-[11px] italic text-parchment/45">
-                  Imagens — Dixit clássico
+                  Dixit clássico
                 </div>
               </button>
               <button
@@ -220,10 +220,26 @@ export default function Lobby({
                   Resposta vira a dica
                 </div>
               </button>
+              <button
+                onClick={() => setMode("stella")}
+                disabled={switching}
+                className={`rounded border px-3 py-2.5 text-left transition ${
+                  mode === "stella"
+                    ? "border-dixit-gold/60 bg-dixit-gold/10"
+                    : "border-parchment/10 hover:border-parchment/25"
+                }`}
+              >
+                <div className="font-display text-sm text-parchment/90">🌟 Stella</div>
+                <div className="mt-0.5 font-serif text-[11px] italic text-parchment/45">
+                  Tema livre, todos votam
+                </div>
+              </button>
             </div>
           ) : (
             <p className="font-serif text-sm italic text-parchment/65">
-              {mode === "questions" ? "❓ Perguntas — resposta vira a dica" : "🃏 Cartas — modo clássico"}
+              {mode === "questions" && "❓ Perguntas — resposta vira a dica"}
+              {mode === "stella" && "🌟 Stella — tema livre, todos votam"}
+              {mode === "classic" && "🃏 Cartas — modo clássico"}
             </p>
           )}
         </div>

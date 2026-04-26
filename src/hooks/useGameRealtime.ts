@@ -25,7 +25,7 @@ export interface GameRow {
   id: string;
   code: string;
   status: "lobby" | "playing" | "finished";
-  mode: "classic" | "questions";
+  mode: "classic" | "questions" | "stella";
   host_player_id: string | null;
   current_round_id: string | null;
   target_score: number;

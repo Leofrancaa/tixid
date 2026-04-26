@@ -35,7 +35,7 @@ export default function VotePhase({
   busy: boolean;
   clue: string;
   onZoom: (item: DeckItemData) => void;
-  mode: "classic" | "questions";
+  mode: "classic" | "questions" | "stella";
 }) {
   const [primaryPending, setPrimaryPending] = useState<string | null>(null);
   const [secondaryPending, setSecondaryPending] = useState<string | null>(null);
@@ -61,18 +61,20 @@ export default function VotePhase({
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
   );
 
-  const canPrimary = !imStoryteller && !hasPrimaryVote && !busy;
-  const canSecondary = !imStoryteller && hasPrimaryVote && hasOdysseyMode && !hasSecondaryVote && !busy;
   const isQuestions = mode === "questions";
+  const isStella = mode === "stella";
+  const odysseyEnabled = mode === "classic" && hasOdysseyMode;
+  const canPrimary = (isStella ? true : !imStoryteller) && !hasPrimaryVote && !busy;
+  const canSecondary = !imStoryteller && hasPrimaryVote && odysseyEnabled && !hasSecondaryVote && !busy;
 
   function statusText() {
-    if (imStoryteller) return "Aguarde os votos";
+    if (imStoryteller && !isStella) return "Aguarde os votos";
     if (!hasPrimaryVote) {
       const target = isQuestions ? "uma pergunta" : "uma carta";
-      return primaryPending ? "Confirme seu voto principal" : `Toque em ${target} para selecionar`;
+      return primaryPending ? "Confirme seu voto" : `Toque em ${target} para selecionar`;
     }
-    if (hasOdysseyMode && !hasSecondaryVote) return secondaryPending ? "Confirme o voto secundário (opcional)" : "Voto principal registrado — escolha um voto secundário ou aguarde";
-    return "Votos registrados — aguarde os demais";
+    if (odysseyEnabled && !hasSecondaryVote) return secondaryPending ? "Confirme o voto secundário (opcional)" : "Voto principal registrado — escolha um voto secundário ou aguarde";
+    return "Voto registrado — aguarde os demais";
   }
 
   const fallbackItem: DeckItemData = isQuestions
@@ -83,10 +85,10 @@ export default function VotePhase({
     <section>
       <div className="panel mb-5 px-5 py-3.5 text-center">
         <p className="font-label text-xs uppercase tracking-widest text-parchment/30 mb-1">
-          {isQuestions ? "Resposta do storyteller" : "Dica do storyteller"}
+          {isQuestions ? "Resposta do storyteller" : isStella ? "Tema da rodada" : "Dica do storyteller"}
         </p>
         <p className="font-serif text-lg italic text-parchment/85">&quot;{clue}&quot;</p>
-        {hasOdysseyMode && !imStoryteller && (
+        {odysseyEnabled && !imStoryteller && (
           <p className="mt-1 font-label text-[10px] uppercase tracking-widest text-dixit-gold/50">
             Modo Odyssey — 2 votos disponíveis
           </p>
@@ -221,7 +223,7 @@ export default function VotePhase({
         </div>
       )}
 
-      {hasOdysseyMode && isHost && (
+      {odysseyEnabled && isHost && (
         <div className="mt-5 space-y-2">
           <div className="flex items-center justify-between rounded border border-parchment/10 px-4 py-2.5">
             <span className="font-label text-xs tracking-widest text-parchment/35">

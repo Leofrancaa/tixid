@@ -26,6 +26,16 @@ export default function CardButton({
         } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
       >
         <DeckItem item={item} />
+        {selected && (
+          <>
+            <div className="pointer-events-none absolute inset-0 bg-dixit-gold/10" />
+            <div className="pointer-events-none absolute right-1.5 top-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-dixit-gold text-ink shadow-lg ring-2 ring-ink/40">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+          </>
+        )}
         {badge}
       </button>
       <button

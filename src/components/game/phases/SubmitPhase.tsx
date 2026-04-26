@@ -29,13 +29,27 @@ export default function SubmitPhase({
   onSubmit: () => void;
   busy: boolean;
   onZoom: (item: DeckItemData) => void;
-  mode: "classic" | "questions";
+  mode: "classic" | "questions" | "stella";
 }) {
-  if (!imStoryteller && !mySubmission) {
-    const hint = mode === "questions"
-      ? `Resposta: "${round.clue}" — escolha uma pergunta sua que poderia produzir essa resposta`
-      : `Dica: "${round.clue}" — escolha a carta que melhor combina`;
-    const buttonLabel = mode === "questions" ? "Enviar Pergunta" : "Enviar Carta";
+  const isStella = mode === "stella";
+  const isQuestions = mode === "questions";
+
+  // In stella, storyteller submits like everyone else.
+  const shouldShowHand = isStella ? !mySubmission : (!imStoryteller && !mySubmission);
+
+  if (shouldShowHand) {
+    let hint: string;
+    let buttonLabel: string;
+    if (isStella) {
+      hint = `Tema: "${round.clue}" — escolha a carta que melhor representa`;
+      buttonLabel = "Enviar Carta";
+    } else if (isQuestions) {
+      hint = `Resposta: "${round.clue}" — escolha uma pergunta sua que poderia produzir essa resposta`;
+      buttonLabel = "Enviar Pergunta";
+    } else {
+      hint = `Dica: "${round.clue}" — escolha a carta que melhor combina`;
+      buttonLabel = "Enviar Carta";
+    }
     return (
       <Hand
         hand={hand}
@@ -50,9 +64,16 @@ export default function SubmitPhase({
     );
   }
 
-  return (
-    <Waiting
-      text={`Aguardando submissões — ${submissions.length - 1} de ${playerCount - 1}`}
-    />
-  );
+  // In stella, total submissions go up to playerCount (everyone submits).
+  // In classic/questions, storyteller already submitted in clue phase, so
+  // submissions.length is (1 + count of nonStorytellers who submitted).
+  const total = isStella ? playerCount : playerCount;
+  const current = isStella ? submissions.length : submissions.length - 1;
+  const denom = isStella ? playerCount : playerCount - 1;
+
+  const text = isStella
+    ? `Aguardando submissões — ${submissions.length} de ${total}`
+    : `Aguardando submissões — ${current} de ${denom}`;
+
+  return <Waiting text={text} />;
 }

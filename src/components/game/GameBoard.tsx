@@ -44,7 +44,7 @@ export default function GameBoard({
   hand: HandCard[];
   gameStatus: string;
   targetScore: number;
-  mode: "classic" | "questions";
+  mode: "classic" | "questions" | "stella";
 }) {
   const [clue, setClue] = useState("");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -102,18 +102,24 @@ export default function GameBoard({
   const mySubmission = submissions.find((s) => s.player_id === myPlayerId);
 
   async function doClue() {
-    if (!clue.trim() || !selectedCard) {
+    const isStella = mode === "stella";
+    if (!clue.trim()) {
       return setErr(
-        mode === "questions"
-          ? "Escreva a resposta e escolha uma pergunta"
-          : "Escreva a dica e escolha uma carta"
+        isStella
+          ? "Escreva o tema da rodada"
+          : mode === "questions"
+            ? "Escreva a resposta e escolha uma pergunta"
+            : "Escreva a dica e escolha uma carta"
       );
+    }
+    if (!isStella && !selectedCard) {
+      return setErr(mode === "questions" ? "Escolha uma pergunta" : "Escolha uma carta");
     }
     setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/clue`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ clue: clue.trim(), cardId: selectedCard }),
+      body: JSON.stringify({ clue: clue.trim(), cardId: isStella ? null : selectedCard }),
     });
     setBusy(false);
     if (!res.ok) setErr((await res.json()).error ?? "erro");
@@ -172,7 +178,7 @@ export default function GameBoard({
   }
 
   const phaseLabel: Record<string, string> = {
-    clue: mode === "questions" ? "Pergunta + Resposta" : "Fase da Dica",
+    clue: mode === "questions" ? "Pergunta + Resposta" : mode === "stella" ? "Definir Tema" : "Fase da Dica",
     submitting: mode === "questions" ? "Escolha de Pergunta" : "Escolha de Cartas",
     voting: "Votação",
     reveal: "Revelação",
@@ -203,6 +209,11 @@ export default function GameBoard({
             {mode === "questions" && (
               <span className="font-label text-[10px] uppercase tracking-widest text-dixit-gold/60">
                 ❓ Perguntas
+              </span>
+            )}
+            {mode === "stella" && (
+              <span className="font-label text-[10px] uppercase tracking-widest text-dixit-gold/60">
+                🌟 Stella
               </span>
             )}
           </div>
