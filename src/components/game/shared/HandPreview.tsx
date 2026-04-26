@@ -1,6 +1,7 @@
 "use client";
 import CardButton from "./CardButton";
 import type { HandCard } from "./Hand";
+import type { DeckItemData } from "./DeckItem";
 
 export default function HandPreview({
   hand,
@@ -9,7 +10,7 @@ export default function HandPreview({
 }: {
   hand: HandCard[];
   storytellerName: string;
-  onZoom: (url: string) => void;
+  onZoom: (item: DeckItemData) => void;
 }) {
   return (
     <section>
@@ -22,7 +23,7 @@ export default function HandPreview({
         {hand.map((c) => (
           <CardButton
             key={c.id}
-            imageUrl={c.imageUrl}
+            item={c.kind === "image" ? { kind: "image", value: c.value } : { kind: "question", value: c.value }}
             onZoom={onZoom}
           />
         ))}

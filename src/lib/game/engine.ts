@@ -4,6 +4,7 @@ import {
   cards,
   games,
   gamePlayers,
+  questions,
   roundSubmissions,
   roundVotes,
   rounds,
@@ -25,9 +26,18 @@ async function getGamePlayers(gameId: string) {
     .orderBy(gamePlayers.seatOrder);
 }
 
-async function initQueue(gameId: string): Promise<string[]> {
-  const allCards = await db.select({ id: cards.id }).from(cards);
-  const shuffled = shuffle(allCards.map((r) => r.id));
+async function getDeckIds(mode: "classic" | "questions"): Promise<string[]> {
+  if (mode === "questions") {
+    const rows = await db.select({ id: questions.id }).from(questions);
+    return rows.map((r) => r.id);
+  }
+  const rows = await db.select({ id: cards.id }).from(cards);
+  return rows.map((r) => r.id);
+}
+
+async function initQueue(gameId: string, mode: "classic" | "questions"): Promise<string[]> {
+  const ids = await getDeckIds(mode);
+  const shuffled = shuffle(ids);
   await db.update(games).set({ cardQueue: shuffled }).where(eq(games.id, gameId));
   return shuffled;
 }
@@ -53,19 +63,23 @@ function allCardsInHands(players: { hand: unknown }[]): string[] {
 }
 
 export async function startGame(gameId: string) {
+  const [game] = await db.select().from(games).where(eq(games.id, gameId));
+  if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
+
   const players = await getGamePlayers(gameId);
   if (players.length < 3) throw new GameError("NOT_ENOUGH_PLAYERS", "Mín. 3 jogadores");
 
   const needed = players.length * HAND_SIZE;
-  const totalCards = await db.select({ c: sql<number>`count(*)` }).from(cards);
-  const deckSize = Number(totalCards[0]?.c ?? 0);
-  if (deckSize < needed)
+  const deckIds = await getDeckIds(game.mode);
+  if (deckIds.length < needed) {
+    const label = game.mode === "questions" ? "perguntas" : "cartas";
     throw new GameError(
       "NOT_ENOUGH_CARDS",
-      `Deck precisa de ≥ ${needed} cartas (tem ${deckSize})`
+      `Deck precisa de ≥ ${needed} ${label} (tem ${deckIds.length})`
     );
+  }
 
-  const queue = await initQueue(gameId);
+  const queue = await initQueue(gameId, game.mode);
 
   for (let i = 0; i < players.length; i++) {
     const hand = queue.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE);

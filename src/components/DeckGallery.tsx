@@ -32,7 +32,12 @@ export default function DeckGallery({ cards }: { cards: DeckCard[] }) {
         ))}
       </div>
 
-      {zoomedUrl && <CardZoom url={zoomedUrl} onClose={() => setZoomedUrl(null)} />}
+      {zoomedUrl && (
+        <CardZoom
+          item={{ kind: "image", value: zoomedUrl }}
+          onClose={() => setZoomedUrl(null)}
+        />
+      )}
     </>
   );
 }

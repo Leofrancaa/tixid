@@ -1,6 +1,7 @@
 "use client";
 import Hand, { type HandCard } from "../shared/Hand";
 import Waiting from "../shared/Waiting";
+import type { DeckItemData } from "../shared/DeckItem";
 import type { RoundRow, SubmissionRow } from "@/hooks/useGameRealtime";
 
 export default function SubmitPhase({
@@ -15,6 +16,7 @@ export default function SubmitPhase({
   onSubmit,
   busy,
   onZoom,
+  mode,
 }: {
   imStoryteller: boolean;
   mySubmission: SubmissionRow | undefined;
@@ -26,9 +28,14 @@ export default function SubmitPhase({
   setSelected: (id: string) => void;
   onSubmit: () => void;
   busy: boolean;
-  onZoom: (url: string) => void;
+  onZoom: (item: DeckItemData) => void;
+  mode: "classic" | "questions";
 }) {
   if (!imStoryteller && !mySubmission) {
+    const hint = mode === "questions"
+      ? `Resposta: "${round.clue}" — escolha uma pergunta sua que poderia produzir essa resposta`
+      : `Dica: "${round.clue}" — escolha a carta que melhor combina`;
+    const buttonLabel = mode === "questions" ? "Enviar Pergunta" : "Enviar Carta";
     return (
       <Hand
         hand={hand}
@@ -36,8 +43,8 @@ export default function SubmitPhase({
         setSelected={setSelected}
         onConfirm={onSubmit}
         busy={busy}
-        hint={`Dica: "${round.clue}" — escolha a carta que melhor combina`}
-        buttonLabel="Enviar Carta"
+        hint={hint}
+        buttonLabel={buttonLabel}
         onZoom={onZoom}
       />
     );

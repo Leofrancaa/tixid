@@ -1,26 +1,31 @@
 "use client";
+import DeckItem, { type DeckItemData } from "../shared/DeckItem";
 import type { PublicPlayer, SubmissionRow, VoteRow } from "@/hooks/useGameRealtime";
+
+type ItemMap = Record<string, DeckItemData>;
 
 export default function RevealPhase({
   submissions,
   votes,
   players,
   storytellerCardId,
-  imageMap,
+  itemMap,
   isHost,
   onNext,
   busy,
   onZoom,
+  mode,
 }: {
   submissions: SubmissionRow[];
   votes: VoteRow[];
   players: PublicPlayer[];
   storytellerCardId: string | null;
-  imageMap: Record<string, string>;
+  itemMap: ItemMap;
   isHost: boolean;
   onNext: () => void;
   busy: boolean;
-  onZoom: (url: string) => void;
+  onZoom: (item: DeckItemData) => void;
+  mode: "classic" | "questions";
 }) {
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]));
   const votesFor: Record<string, { player: PublicPlayer; isSecondary: boolean }[]> = {};
@@ -32,6 +37,10 @@ export default function RevealPhase({
   const ordered = [...submissions].sort(
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
   );
+  const fallbackItem: DeckItemData = mode === "questions"
+    ? { kind: "question", value: "" }
+    : { kind: "image", value: "" };
+
   return (
     <section>
       <p className="mb-4 text-center font-serif text-sm italic text-parchment/45">
@@ -41,6 +50,7 @@ export default function RevealPhase({
         {ordered.map((s) => {
           const isStory = s.card_id === storytellerCardId;
           const owner = playerById[s.player_id];
+          const item = itemMap[s.card_id] ?? fallbackItem;
           return (
             <div
               key={s.id}
@@ -51,19 +61,14 @@ export default function RevealPhase({
               }}
             >
               <div className="group relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageMap[s.card_id] ?? ""}
-                  alt=""
-                  className="aspect-[3/4] w-full object-cover"
-                />
+                <DeckItem item={item} />
                 {isStory && (
                   <div className="absolute left-2 top-2 rounded bg-dixit-gold/90 px-1.5 py-0.5 font-label text-xs font-bold text-ink">
                     ⭐ Storyteller
                   </div>
                 )}
                 <button
-                  onClick={() => onZoom(imageMap[s.card_id] ?? "")}
+                  onClick={() => onZoom(item)}
                   className="absolute bottom-1.5 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-80 transition hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   ⛶

@@ -12,11 +12,14 @@ import { RoundSkeleton } from "@/components/ui/Skeleton";
 import CardZoom from "./CardZoom";
 import RaceTrack from "./RaceTrack";
 import type { HandCard } from "./shared/Hand";
+import type { DeckItemData } from "./shared/DeckItem";
 import CluePhase from "./phases/CluePhase";
 import SubmitPhase from "./phases/SubmitPhase";
 import VotePhase from "./phases/VotePhase";
 import RevealPhase from "./phases/RevealPhase";
 import EndScreen from "./phases/EndScreen";
+
+type ItemMap = Record<string, DeckItemData>;
 
 export default function GameBoard({
   code,
@@ -29,6 +32,7 @@ export default function GameBoard({
   hand,
   gameStatus,
   targetScore,
+  mode,
 }: {
   code: string;
   myPlayerId: string;
@@ -40,37 +44,56 @@ export default function GameBoard({
   hand: HandCard[];
   gameStatus: string;
   targetScore: number;
+  mode: "classic" | "questions";
 }) {
   const [clue, setClue] = useState("");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [imageMap, setImageMap] = useState<Record<string, string>>({});
-  const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+  const [itemMap, setItemMap] = useState<ItemMap>({});
+  const [zoomedItem, setZoomedItem] = useState<DeckItemData | null>(null);
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
   const [endingGame, setEndingGame] = useState(false);
 
+  // Prefetch submission item data (image url or question text) based on mode
   useEffect(() => {
     const ids = submissions.map((s) => s.card_id).filter(Boolean) as string[];
     if (!ids.length) return;
-    const missing = ids.filter((id) => !imageMap[id]);
+    const missing = ids.filter((id) => !itemMap[id]);
     if (!missing.length) return;
     const supabase = createSupabaseBrowserClient();
-    supabase
-      .from("cards")
-      .select("id,image_url")
-      .in("id", missing)
-      .then(({ data }) => {
-        if (!data) return;
-        setImageMap((m) => {
-          const nm = { ...m };
-          for (const row of data as { id: string; image_url: string }[]) {
-            nm[row.id] = row.image_url;
-          }
-          return nm;
+    if (mode === "questions") {
+      supabase
+        .from("questions")
+        .select("id,text")
+        .in("id", missing)
+        .then(({ data }) => {
+          if (!data) return;
+          setItemMap((m) => {
+            const nm = { ...m };
+            for (const row of data as { id: string; text: string }[]) {
+              nm[row.id] = { kind: "question", value: row.text };
+            }
+            return nm;
+          });
         });
-      });
-  }, [submissions, imageMap]);
+    } else {
+      supabase
+        .from("cards")
+        .select("id,image_url")
+        .in("id", missing)
+        .then(({ data }) => {
+          if (!data) return;
+          setItemMap((m) => {
+            const nm = { ...m };
+            for (const row of data as { id: string; image_url: string }[]) {
+              nm[row.id] = { kind: "image", value: row.image_url };
+            }
+            return nm;
+          });
+        });
+    }
+  }, [submissions, itemMap, mode]);
 
   if (!round) return <RoundSkeleton />;
 
@@ -79,7 +102,13 @@ export default function GameBoard({
   const mySubmission = submissions.find((s) => s.player_id === myPlayerId);
 
   async function doClue() {
-    if (!clue.trim() || !selectedCard) return setErr("Escreva a dica e escolha uma carta");
+    if (!clue.trim() || !selectedCard) {
+      return setErr(
+        mode === "questions"
+          ? "Escreva a resposta e escolha uma pergunta"
+          : "Escreva a dica e escolha uma carta"
+      );
+    }
     setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/clue`, {
       method: "POST",
@@ -92,7 +121,9 @@ export default function GameBoard({
   }
 
   async function doSubmit() {
-    if (!selectedCard) return setErr("Escolha uma carta");
+    if (!selectedCard) {
+      return setErr(mode === "questions" ? "Escolha uma pergunta" : "Escolha uma carta");
+    }
     setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/submit`, {
       method: "POST",
@@ -141,8 +172,8 @@ export default function GameBoard({
   }
 
   const phaseLabel: Record<string, string> = {
-    clue: "Fase da Dica",
-    submitting: "Escolha de Cartas",
+    clue: mode === "questions" ? "Pergunta + Resposta" : "Fase da Dica",
+    submitting: mode === "questions" ? "Escolha de Pergunta" : "Escolha de Cartas",
     voting: "Votação",
     reveal: "Revelação",
     finished: "Fim de Jogo",
@@ -150,7 +181,7 @@ export default function GameBoard({
 
   return (
     <>
-      {zoomedUrl && <CardZoom url={zoomedUrl} onClose={() => setZoomedUrl(null)} />}
+      {zoomedItem && <CardZoom item={zoomedItem} onClose={() => setZoomedItem(null)} />}
 
       <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
         <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -169,6 +200,11 @@ export default function GameBoard({
             <span className="font-label text-xs tracking-widest text-parchment/30 uppercase">
               Sala {code}
             </span>
+            {mode === "questions" && (
+              <span className="font-label text-[10px] uppercase tracking-widest text-dixit-gold/60">
+                ❓ Perguntas
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="phase-badge">{phaseLabel[round.phase] ?? round.phase}</span>
@@ -218,7 +254,8 @@ export default function GameBoard({
               setSelected={setSelectedCard}
               onSubmit={doClue}
               busy={busy}
-              onZoom={setZoomedUrl}
+              onZoom={setZoomedItem}
+              mode={mode}
             />
           ) : round.phase === "submitting" ? (
             <SubmitPhase
@@ -232,12 +269,13 @@ export default function GameBoard({
               setSelected={setSelectedCard}
               onSubmit={doSubmit}
               busy={busy}
-              onZoom={setZoomedUrl}
+              onZoom={setZoomedItem}
+              mode={mode}
             />
           ) : round.phase === "voting" ? (
             <VotePhase
               submissions={submissions}
-              imageMap={imageMap}
+              itemMap={itemMap}
               mySubmission={mySubmission}
               onVote={doVote}
               onResolve={doResolve}
@@ -248,7 +286,8 @@ export default function GameBoard({
               playerCount={players.length}
               busy={busy}
               clue={round.clue ?? ""}
-              onZoom={setZoomedUrl}
+              onZoom={setZoomedItem}
+              mode={mode}
             />
           ) : round.phase === "reveal" ? (
             <RevealPhase
@@ -256,11 +295,12 @@ export default function GameBoard({
               votes={votes}
               players={players}
               storytellerCardId={round.storyteller_card_id}
-              imageMap={imageMap}
+              itemMap={itemMap}
               isHost={isHost}
               onNext={doNext}
               busy={busy}
-              onZoom={setZoomedUrl}
+              onZoom={setZoomedItem}
+              mode={mode}
             />
           ) : null}
         </div>

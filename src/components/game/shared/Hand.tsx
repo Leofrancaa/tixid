@@ -1,9 +1,17 @@
 "use client";
 import CardButton from "./CardButton";
+import type { DeckItemData } from "./DeckItem";
 
 export interface HandCard {
   id: string;
-  imageUrl: string;
+  kind: "image" | "question";
+  value: string;
+}
+
+function asItem(c: HandCard): DeckItemData {
+  return c.kind === "image"
+    ? { kind: "image", value: c.value }
+    : { kind: "question", value: c.value };
 }
 
 export default function Hand({
@@ -23,7 +31,7 @@ export default function Hand({
   busy: boolean;
   hint: string;
   buttonLabel: string;
-  onZoom: (url: string) => void;
+  onZoom: (item: DeckItemData) => void;
 }) {
   return (
     <section>
@@ -34,7 +42,7 @@ export default function Hand({
         {hand.map((c) => (
           <CardButton
             key={c.id}
-            imageUrl={c.imageUrl}
+            item={asItem(c)}
             selected={selected === c.id}
             onClick={() => setSelected(c.id)}
             onZoom={onZoom}

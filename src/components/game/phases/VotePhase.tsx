@@ -1,11 +1,14 @@
 "use client";
 import { useRef, useState } from "react";
 import CardButton from "../shared/CardButton";
+import DeckItem, { type DeckItemData } from "../shared/DeckItem";
 import type { SubmissionRow, VoteRow } from "@/hooks/useGameRealtime";
+
+type ItemMap = Record<string, DeckItemData>;
 
 export default function VotePhase({
   submissions,
-  imageMap,
+  itemMap,
   mySubmission,
   onVote,
   onResolve,
@@ -17,9 +20,10 @@ export default function VotePhase({
   busy,
   clue,
   onZoom,
+  mode,
 }: {
   submissions: SubmissionRow[];
-  imageMap: Record<string, string>;
+  itemMap: ItemMap;
   mySubmission: SubmissionRow | undefined;
   onVote: (id: string, isSecondary?: boolean) => void;
   onResolve: () => void;
@@ -30,11 +34,11 @@ export default function VotePhase({
   playerCount: number;
   busy: boolean;
   clue: string;
-  onZoom: (url: string) => void;
+  onZoom: (item: DeckItemData) => void;
+  mode: "classic" | "questions";
 }) {
   const [primaryPending, setPrimaryPending] = useState<string | null>(null);
   const [secondaryPending, setSecondaryPending] = useState<string | null>(null);
-  // Synchronous locks — prevent double-tap before React re-renders
   const primarySentRef = useRef(false);
   const secondarySentRef = useRef(false);
   const [primarySent, setPrimarySent] = useState(false);
@@ -59,19 +63,27 @@ export default function VotePhase({
 
   const canPrimary = !imStoryteller && !hasPrimaryVote && !busy;
   const canSecondary = !imStoryteller && hasPrimaryVote && hasOdysseyMode && !hasSecondaryVote && !busy;
+  const isQuestions = mode === "questions";
 
   function statusText() {
     if (imStoryteller) return "Aguarde os votos";
-    if (!hasPrimaryVote) return primaryPending ? "Confirme seu voto principal" : "Toque numa carta para selecionar";
+    if (!hasPrimaryVote) {
+      const target = isQuestions ? "uma pergunta" : "uma carta";
+      return primaryPending ? "Confirme seu voto principal" : `Toque em ${target} para selecionar`;
+    }
     if (hasOdysseyMode && !hasSecondaryVote) return secondaryPending ? "Confirme o voto secundário (opcional)" : "Voto principal registrado — escolha um voto secundário ou aguarde";
     return "Votos registrados — aguarde os demais";
   }
+
+  const fallbackItem: DeckItemData = isQuestions
+    ? { kind: "question", value: "" }
+    : { kind: "image", value: "" };
 
   return (
     <section>
       <div className="panel mb-5 px-5 py-3.5 text-center">
         <p className="font-label text-xs uppercase tracking-widest text-parchment/30 mb-1">
-          Dica do storyteller
+          {isQuestions ? "Resposta do storyteller" : "Dica do storyteller"}
         </p>
         <p className="font-serif text-lg italic text-parchment/85">&quot;{clue}&quot;</p>
         {hasOdysseyMode && !imStoryteller && (
@@ -90,19 +102,19 @@ export default function VotePhase({
           const isMyPrimaryVote = s.id === confirmedPrimarySubId;
           const isMySecondaryVote = s.id === confirmedSecondarySubId;
           const blockedForSecondary = canSecondary && isMyPrimaryVote;
+          const item = itemMap[s.card_id] ?? fallbackItem;
 
           if (isOwn) {
             return (
               <div key={s.id} className="card-frame relative opacity-50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageMap[s.card_id] ?? ""} alt="" className="aspect-[3/4] w-full object-cover" />
+                <DeckItem item={item} />
                 <div className="absolute inset-0 flex items-end">
                   <div className="w-full bg-ink/90 py-2 text-center font-label text-xs tracking-widest text-parchment/60 backdrop-blur-sm">
-                    sua carta
+                    {isQuestions ? "sua pergunta" : "sua carta"}
                   </div>
                 </div>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onZoom(imageMap[s.card_id] ?? ""); }}
+                  onClick={(e) => { e.stopPropagation(); onZoom(item); }}
                   className="absolute bottom-8 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded bg-black/60 text-xs text-white/60 opacity-70 transition hover:opacity-100"
                 >⛶</button>
               </div>
@@ -112,7 +124,7 @@ export default function VotePhase({
           return (
             <div key={s.id} className="relative">
               <CardButton
-                imageUrl={imageMap[s.card_id] ?? ""}
+                item={item}
                 onClick={
                   blockedForSecondary ? undefined
                   : canPrimary ? () => setPrimaryPending(isPrimaryPending ? null : s.id)
@@ -186,7 +198,7 @@ export default function VotePhase({
             </button>
           ) : (
             <div className="rounded border border-parchment/10 py-3 text-center font-label text-xs tracking-wider text-parchment/25">
-              Selecione uma carta para o voto secundário
+              {isQuestions ? "Selecione uma pergunta para o voto secundário" : "Selecione uma carta para o voto secundário"}
             </div>
           )}
           <button
@@ -205,7 +217,7 @@ export default function VotePhase({
 
       {canPrimary && !primaryPending && (
         <div className="mt-4 rounded border border-parchment/10 py-3 text-center font-label text-xs tracking-wider text-parchment/25">
-          Nenhuma carta selecionada
+          {isQuestions ? "Nenhuma pergunta selecionada" : "Nenhuma carta selecionada"}
         </div>
       )}
 

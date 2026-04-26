@@ -8,11 +8,13 @@ export default function Lobby({
   code,
   players,
   isHost,
+  mode,
   onStarted,
 }: {
   code: string;
   players: PublicPlayer[];
   isHost: boolean;
+  mode: "classic" | "questions";
   onStarted?: () => void;
 }) {
   const [starting, setStarting] = useState(false);
@@ -20,6 +22,22 @@ export default function Lobby({
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [switching, setSwitching] = useState(false);
+
+  async function setMode(next: "classic" | "questions") {
+    if (next === mode || switching) return;
+    setSwitching(true);
+    const res = await fetch(`/api/games/${code}/mode`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: next }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErr(data.error ?? "Falha ao trocar modo");
+    }
+    setSwitching(false);
+  }
 
   async function copyCode() {
     try {
@@ -165,6 +183,49 @@ export default function Lobby({
               ))
             )}
           </ul>
+        </div>
+
+        {/* Mode selector */}
+        <div className="panel mb-4 p-4">
+          <p className="mb-2.5 font-label text-xs uppercase tracking-widest text-parchment/40">
+            Modo de jogo
+          </p>
+          {isHost ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setMode("classic")}
+                disabled={switching}
+                className={`rounded border px-3 py-2.5 text-left transition ${
+                  mode === "classic"
+                    ? "border-dixit-gold/60 bg-dixit-gold/10"
+                    : "border-parchment/10 hover:border-parchment/25"
+                }`}
+              >
+                <div className="font-display text-sm text-parchment/90">🃏 Cartas</div>
+                <div className="mt-0.5 font-serif text-[11px] italic text-parchment/45">
+                  Imagens — Dixit clássico
+                </div>
+              </button>
+              <button
+                onClick={() => setMode("questions")}
+                disabled={switching}
+                className={`rounded border px-3 py-2.5 text-left transition ${
+                  mode === "questions"
+                    ? "border-dixit-gold/60 bg-dixit-gold/10"
+                    : "border-parchment/10 hover:border-parchment/25"
+                }`}
+              >
+                <div className="font-display text-sm text-parchment/90">❓ Perguntas</div>
+                <div className="mt-0.5 font-serif text-[11px] italic text-parchment/45">
+                  Resposta vira a dica
+                </div>
+              </button>
+            </div>
+          ) : (
+            <p className="font-serif text-sm italic text-parchment/65">
+              {mode === "questions" ? "❓ Perguntas — resposta vira a dica" : "🃏 Cartas — modo clássico"}
+            </p>
+          )}
         </div>
 
         {/* Actions */}

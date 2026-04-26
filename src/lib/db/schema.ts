@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const gameStatus = pgEnum("game_status", ["lobby", "playing", "finished"]);
+export const gameMode = pgEnum("game_mode", ["classic", "questions"]);
 export const roundPhase = pgEnum("round_phase", [
   "clue",
   "submitting",
@@ -27,10 +28,17 @@ export const cards = pgTable("cards", {
   addedBy: uuid("added_by"),
 });
 
+export const questions = pgTable("questions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const games = pgTable("games", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   status: gameStatus("status").notNull().default("lobby"),
+  mode: gameMode("mode").notNull().default("classic"),
   maxPlayers: integer("max_players").notNull().default(12),
   targetScore: integer("target_score").notNull().default(30),
   hostPlayerId: uuid("host_player_id"),
@@ -73,7 +81,7 @@ export const rounds = pgTable(
       .notNull()
       .references(() => gamePlayers.id, { onDelete: "cascade" }),
     clue: text("clue"),
-    storytellerCardId: uuid("storyteller_card_id").references(() => cards.id),
+    storytellerCardId: uuid("storyteller_card_id"),
     phase: roundPhase("phase").notNull().default("clue"),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
@@ -93,9 +101,7 @@ export const roundSubmissions = pgTable(
     playerId: uuid("player_id")
       .notNull()
       .references(() => gamePlayers.id, { onDelete: "cascade" }),
-    cardId: uuid("card_id")
-      .notNull()
-      .references(() => cards.id),
+    cardId: uuid("card_id").notNull(),
     displayOrder: integer("display_order"),
   },
   (t) => ({

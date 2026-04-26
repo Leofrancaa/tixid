@@ -13,8 +13,13 @@ interface MeData {
     score: number;
     isHost: boolean;
   } | null;
-  hand: { id: string; imageUrl: string }[];
-  game: { id: string; status: string; currentRoundId: string | null };
+  hand: { id: string; kind: "image" | "question"; value: string }[];
+  game: {
+    id: string;
+    status: string;
+    mode: "classic" | "questions";
+    currentRoundId: string | null;
+  };
 }
 
 export default function GameClient({
@@ -104,6 +109,7 @@ export default function GameClient({
         code={code}
         players={rt.players}
         isHost={isHost}
+        mode={rt.game.mode ?? me?.game.mode ?? "classic"}
         onStarted={refreshMe}
       />
     );
@@ -121,6 +127,7 @@ export default function GameClient({
       hand={me?.hand ?? []}
       gameStatus={effectiveStatus}
       targetScore={rt.game.target_score ?? 30}
+      mode={rt.game.mode ?? me?.game.mode ?? "classic"}
     />
   );
 }

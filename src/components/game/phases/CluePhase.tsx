@@ -1,6 +1,7 @@
 "use client";
 import Hand, { type HandCard } from "../shared/Hand";
 import HandPreview from "../shared/HandPreview";
+import type { DeckItemData } from "../shared/DeckItem";
 
 export default function CluePhase({
   imStoryteller,
@@ -13,6 +14,7 @@ export default function CluePhase({
   onSubmit,
   busy,
   onZoom,
+  mode,
 }: {
   imStoryteller: boolean;
   storytellerName: string;
@@ -23,22 +25,32 @@ export default function CluePhase({
   setSelected: (id: string) => void;
   onSubmit: () => void;
   busy: boolean;
-  onZoom: (url: string) => void;
+  onZoom: (item: DeckItemData) => void;
+  mode: "classic" | "questions";
 }) {
   if (!imStoryteller) {
     return <HandPreview hand={hand} storytellerName={storytellerName} onZoom={onZoom} />;
   }
 
+  const isQuestions = mode === "questions";
+  const headerText = isQuestions
+    ? "Você é o storyteller — escolha uma pergunta da sua mão e digite a resposta."
+    : "Você é o storyteller — escolha uma carta e dê uma dica.";
+  const placeholder = isQuestions
+    ? "Sua resposta — uma palavra, frase, número, qualquer coisa…"
+    : "Sua dica — uma palavra, frase, som, emoção...";
+  const buttonLabel = isQuestions ? "Enviar Pergunta + Resposta" : "Enviar Dica + Carta";
+
   return (
     <section>
       <p className="mb-4 text-center font-serif text-sm italic text-parchment/55">
-        Você é o storyteller — escolha uma carta e dê uma dica.
+        {headerText}
       </p>
       <input
         value={clue}
         onChange={(e) => setClue(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onSubmit()}
-        placeholder="Sua dica — uma palavra, frase, som, emoção..."
+        placeholder={placeholder}
         maxLength={100}
         className="field mb-4"
       />
@@ -49,7 +61,7 @@ export default function CluePhase({
         onConfirm={onSubmit}
         busy={busy}
         hint=""
-        buttonLabel="Enviar Dica + Carta"
+        buttonLabel={buttonLabel}
         onZoom={onZoom}
       />
     </section>
