@@ -1,4 +1,7 @@
-import type { APIRequestContext } from "@playwright/test";
+import type { PlayerClient } from "./playerClient";
+
+// Usa PlayerClient como tipo de requisição — sem dependência de browser
+type Req = PlayerClient;
 
 type GameMode = "classic" | "questions" | "stella";
 
@@ -26,67 +29,67 @@ export interface Submission {
   displayOrder: number | null;
 }
 
-export async function createGame(req: APIRequestContext, nickname: string): Promise<string> {
+export async function createGame(req: Req, nickname: string): Promise<string> {
   const res = await req.post("/api/games", { data: { nickname } });
-  if (!res.ok()) throw new Error(`createGame failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`createGame failed (HTTP ${res.status()}): ${await res.text()}`);
   return ((await res.json()) as { code: string }).code;
 }
 
-export async function joinGame(req: APIRequestContext, code: string, nickname: string) {
+export async function joinGame(req: Req, code: string, nickname: string) {
   const res = await req.post(`/api/games/${code}/join`, { data: { nickname } });
-  if (!res.ok()) throw new Error(`joinGame (${nickname}) failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`joinGame (${nickname}) failed (HTTP ${res.status()}): ${await res.text()}`);
 }
 
-export async function setMode(req: APIRequestContext, code: string, mode: GameMode) {
+export async function setMode(req: Req, code: string, mode: GameMode) {
   const res = await req.patch(`/api/games/${code}/mode`, { data: { mode } });
-  if (!res.ok()) throw new Error(`setMode failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`setMode failed (HTTP ${res.status()}): ${await res.text()}`);
 }
 
-export async function startGame(req: APIRequestContext, code: string): Promise<string> {
+export async function startGame(req: Req, code: string): Promise<string> {
   const res = await req.post(`/api/games/${code}/start`);
-  if (!res.ok()) throw new Error(`startGame failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`startGame failed (HTTP ${res.status()}): ${await res.text()}`);
   return ((await res.json()) as { roundId: string }).roundId;
 }
 
-export async function getMe(req: APIRequestContext, code: string): Promise<MeData> {
+export async function getMe(req: Req, code: string): Promise<MeData> {
   const res = await req.get(`/api/games/${code}/me`);
-  if (!res.ok()) throw new Error(`getMe failed: ${await res.text()}`);
-  return res.json();
+  if (!res.ok()) throw new Error(`getMe failed (HTTP ${res.status()}): ${await res.text()}`);
+  return res.json() as Promise<MeData>;
 }
 
-export async function getRound(req: APIRequestContext, code: string): Promise<RoundState> {
+export async function getRound(req: Req, code: string): Promise<RoundState> {
   const res = await req.get(`/api/games/${code}/round`);
-  if (!res.ok()) throw new Error(`getRound failed: ${await res.text()}`);
-  return res.json();
+  if (!res.ok()) throw new Error(`getRound failed (HTTP ${res.status()}): ${await res.text()}`);
+  return res.json() as Promise<RoundState>;
 }
 
 export async function submitClue(
-  req: APIRequestContext,
+  req: Req,
   roundId: string,
   clue: string,
   cardId: string | null
 ) {
   const res = await req.post(`/api/rounds/${roundId}/clue`, { data: { clue, cardId } });
-  if (!res.ok()) throw new Error(`submitClue failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`submitClue failed (HTTP ${res.status()}): ${await res.text()}`);
 }
 
-export async function submitCard(req: APIRequestContext, roundId: string, cardId: string) {
+export async function submitCard(req: Req, roundId: string, cardId: string) {
   const res = await req.post(`/api/rounds/${roundId}/submit`, { data: { cardId } });
-  if (!res.ok()) throw new Error(`submitCard failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`submitCard failed (HTTP ${res.status()}): ${await res.text()}`);
   return ((await res.json()) as { submissionId: string | null }).submissionId;
 }
 
 export async function getSubmissions(
-  req: APIRequestContext,
+  req: Req,
   roundId: string
 ): Promise<{ submissions: Submission[]; myPlayerId: string }> {
   const res = await req.get(`/api/rounds/${roundId}/submissions`);
-  if (!res.ok()) throw new Error(`getSubmissions failed: ${await res.text()}`);
-  return res.json();
+  if (!res.ok()) throw new Error(`getSubmissions failed (HTTP ${res.status()}): ${await res.text()}`);
+  return res.json() as Promise<{ submissions: Submission[]; myPlayerId: string }>;
 }
 
 export async function castVote(
-  req: APIRequestContext,
+  req: Req,
   roundId: string,
   submissionId: string,
   isSecondary = false
@@ -94,25 +97,25 @@ export async function castVote(
   const res = await req.post(`/api/rounds/${roundId}/vote`, {
     data: { submissionId, isSecondary },
   });
-  if (!res.ok()) throw new Error(`castVote failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`castVote failed (HTTP ${res.status()}): ${await res.text()}`);
 }
 
-export async function resolveVotes(req: APIRequestContext, roundId: string) {
+export async function resolveVotes(req: Req, roundId: string) {
   const res = await req.post(`/api/rounds/${roundId}/resolve`);
-  if (!res.ok()) throw new Error(`resolveVotes failed: ${await res.text()}`);
+  if (!res.ok()) throw new Error(`resolveVotes failed (HTTP ${res.status()}): ${await res.text()}`);
 }
 
 export async function nextRound(
-  req: APIRequestContext,
+  req: Req,
   code: string
 ): Promise<{ finished: boolean }> {
   const res = await req.post(`/api/games/${code}/next`);
-  if (!res.ok()) throw new Error(`nextRound failed: ${await res.text()}`);
-  return res.json();
+  if (!res.ok()) throw new Error(`nextRound failed (HTTP ${res.status()}): ${await res.text()}`);
+  return res.json() as Promise<{ finished: boolean }>;
 }
 
 export async function waitForPhase(
-  req: APIRequestContext,
+  req: Req,
   code: string,
   phase: string,
   { timeoutMs = 10_000 } = {}
@@ -125,19 +128,4 @@ export async function waitForPhase(
   }
   const state = await getRound(req, code);
   throw new Error(`waitForPhase("${phase}") timed out — atual: ${state.round?.phase}`);
-}
-
-export async function waitForGameStatus(
-  req: APIRequestContext,
-  code: string,
-  status: string,
-  { timeoutMs = 10_000 } = {}
-) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const state = await getRound(req, code);
-    if (state.gameStatus === status) return;
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`waitForGameStatus("${status}") timed out`);
 }
