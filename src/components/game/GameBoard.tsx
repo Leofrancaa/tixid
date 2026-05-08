@@ -191,7 +191,7 @@ export default function GameBoard({
     if (!res.ok) setErr((await res.json()).error ?? "erro");
   }
 
-  async function doVote(submissionId: string, isSecondary = false) {
+  async function doVote(submissionId: string, isSecondary = false): Promise<boolean> {
     setBusy(true); setErr(null);
     const res = await fetch(`/api/rounds/${round!.id}/vote`, {
       method: "POST",
@@ -199,7 +199,11 @@ export default function GameBoard({
       body: JSON.stringify({ submissionId, isSecondary }),
     });
     setBusy(false);
-    if (!res.ok) setErr((await res.json()).error ?? "erro");
+    if (!res.ok) {
+      setErr((await res.json()).error ?? "erro");
+      return false;
+    }
+    return true;
   }
 
   async function doResolve() {

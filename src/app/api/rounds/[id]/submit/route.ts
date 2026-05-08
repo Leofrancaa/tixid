@@ -28,8 +28,8 @@ export async function POST(
     return NextResponse.json({ error: "não é jogador" }, { status: 403 });
 
   try {
-    await submitCard(id, me.id, body.data.cardId);
-    return NextResponse.json({ ok: true });
+    const sub = await submitCard(id, me.id, body.data.cardId);
+    return NextResponse.json({ ok: true, submissionId: sub?.id ?? null });
   } catch (e) {
     if (e instanceof GameError)
       return NextResponse.json({ error: e.message, code: e.code }, { status: 400 });

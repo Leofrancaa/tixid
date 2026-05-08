@@ -263,7 +263,7 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
     .set({ hand: hand.filter((c) => c !== cardId) })
     .where(eq(gamePlayers.id, playerId));
 
-  await db.insert(roundSubmissions).values({ roundId, playerId, cardId });
+  const [sub] = await db.insert(roundSubmissions).values({ roundId, playerId, cardId }).returning();
 
   const players = await getGamePlayers(round.gameId);
   const expected = isStella ? players.length : players.length; // every player has 1 sub by end
@@ -284,6 +284,8 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
     }
     await db.update(rounds).set({ phase: "voting" }).where(eq(rounds.id, roundId));
   }
+
+  return sub;
 }
 
 export async function submitStellaSelection(

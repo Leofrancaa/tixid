@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CardButton from "../shared/CardButton";
 import DeckItem, { type DeckItemData } from "../shared/DeckItem";
 import type { SubmissionRow, VoteRow } from "@/hooks/useGameRealtime";
@@ -25,7 +25,7 @@ export default function VotePhase({
   submissions: SubmissionRow[];
   itemMap: ItemMap;
   mySubmission: SubmissionRow | undefined;
-  onVote: (id: string, isSecondary?: boolean) => void;
+  onVote: (id: string, isSecondary?: boolean) => Promise<boolean>;
   onResolve: () => void;
   votes: VoteRow[];
   myPlayerId: string;
@@ -45,6 +45,7 @@ export default function VotePhase({
   const [secondarySent, setSecondarySent] = useState(false);
   const [localPrimarySubId, setLocalPrimarySubId] = useState<string | null>(null);
   const [localSecondarySubId, setLocalSecondarySubId] = useState<string | null>(null);
+  const [cooldownSecs, setCooldownSecs] = useState(0);
 
   const myPrimaryVote = votes.find((v) => v.voter_id === myPlayerId && !v.is_secondary);
   const mySecondaryVote = votes.find((v) => v.voter_id === myPlayerId && v.is_secondary);
@@ -55,7 +56,24 @@ export default function VotePhase({
   const hasOdysseyMode = playerCount >= 7;
   const nonStorytellerCount = playerCount - 1;
   const primaryVotesCount = votes.filter((v) => !v.is_secondary).length;
+  const secondaryVotesCount = votes.filter((v) => v.is_secondary).length;
   const allPrimaryIn = primaryVotesCount >= nonStorytellerCount;
+
+  // Quando todos os votos primários chegam, inicia cooldown de 8s para o host
+  // dar tempo para votos secundários chegarem antes de revelar
+  const ODYSSEY_COOLDOWN = 8;
+  useEffect(() => {
+    if (!allPrimaryIn || !isHost || mode !== "classic" || !hasOdysseyMode) return;
+    setCooldownSecs(ODYSSEY_COOLDOWN);
+    const iv = setInterval(() => {
+      setCooldownSecs((s) => {
+        if (s <= 1) { clearInterval(iv); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPrimaryIn]);
 
   const ordered = [...submissions].sort(
     (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
@@ -166,13 +184,18 @@ export default function VotePhase({
 
       {canPrimary && primaryPending && (
         <button
-          onClick={() => {
+          onClick={async () => {
             if (primarySentRef.current) return;
             primarySentRef.current = true;
             setPrimarySent(true);
             setLocalPrimarySubId(primaryPending);
-            onVote(primaryPending, false);
             setPrimaryPending(null);
+            const ok = await onVote(primaryPending, false);
+            if (!ok) {
+              primarySentRef.current = false;
+              setPrimarySent(false);
+              setLocalPrimarySubId(null);
+            }
           }}
           disabled={busy || primarySent}
           className="btn-gold mt-5 w-full py-3.5 text-sm"
@@ -185,13 +208,18 @@ export default function VotePhase({
         <div className="mt-4 space-y-2">
           {secondaryPending ? (
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (secondarySentRef.current) return;
                 secondarySentRef.current = true;
                 setSecondarySent(true);
                 setLocalSecondarySubId(secondaryPending);
-                onVote(secondaryPending, true);
                 setSecondaryPending(null);
+                const ok = await onVote(secondaryPending, true);
+                if (!ok) {
+                  secondarySentRef.current = false;
+                  setSecondarySent(false);
+                  setLocalSecondarySubId(null);
+                }
               }}
               disabled={busy || secondarySent}
               className="btn-wine w-full py-3 text-sm"
@@ -227,18 +255,32 @@ export default function VotePhase({
         <div className="mt-5 space-y-2">
           <div className="flex items-center justify-between rounded border border-parchment/10 px-4 py-2.5">
             <span className="font-label text-xs tracking-widest text-parchment/35">
-              Votos primários recebidos
+              Votos primários
             </span>
             <span className={`font-label text-sm font-semibold ${allPrimaryIn ? "text-dixit-gold" : "text-parchment/50"}`}>
               {primaryVotesCount} / {nonStorytellerCount}
             </span>
           </div>
+          {allPrimaryIn && (
+            <div className="flex items-center justify-between rounded border border-parchment/10 px-4 py-2.5">
+              <span className="font-label text-xs tracking-widest text-parchment/35">
+                Votos secundários (opcionais)
+              </span>
+              <span className="font-label text-sm font-semibold text-parchment/50">
+                {secondaryVotesCount}
+              </span>
+            </div>
+          )}
           <button
             onClick={onResolve}
-            disabled={busy || !allPrimaryIn}
+            disabled={busy || !allPrimaryIn || cooldownSecs > 0}
             className="btn-gold w-full py-3.5 text-sm disabled:opacity-40"
           >
-            {allPrimaryIn ? "Revelar Votos" : `Aguardando votos… (${primaryVotesCount}/${nonStorytellerCount})`}
+            {!allPrimaryIn
+              ? `Aguardando votos… (${primaryVotesCount}/${nonStorytellerCount})`
+              : cooldownSecs > 0
+              ? `Aguardando votos secundários… (${cooldownSecs}s)`
+              : "Revelar Votos"}
           </button>
         </div>
       )}
