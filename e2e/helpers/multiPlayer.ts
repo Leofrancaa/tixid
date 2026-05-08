@@ -1,4 +1,4 @@
-import type { Browser, APIRequestContext } from "@playwright/test";
+import type { APIRequestContext } from "@playwright/test";
 import {
   createGame,
   joinGame,
@@ -17,6 +17,12 @@ import {
 
 type GameMode = "classic" | "questions" | "stella";
 
+// playwright.request é o factory que cria novos APIRequestContext
+// Tipagem mínima necessária (evita importar PlaywrightTestArgs completo)
+interface RequestFactory {
+  newContext(opts?: { baseURL?: string; extraHTTPHeaders?: Record<string, string> }): Promise<APIRequestContext>;
+}
+
 export interface Player {
   req: APIRequestContext;
   nickname: string;
@@ -33,22 +39,27 @@ export interface RoundResult {
   finished: boolean;
 }
 
-// Cria jogo com N jogadores usando contextos isolados (cookie próprio por contexto)
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+// Cria jogo com N jogadores usando APIRequestContext isolados (sem browser)
+// Cada contexto tem seu próprio cookie jar → cada contexto = um jogador
 export async function setupGame(
-  browser: Browser,
+  requestFactory: RequestFactory,
   { playerCount, mode }: { playerCount: number; mode?: GameMode }
 ): Promise<GameSession> {
   const players: Player[] = [];
 
-  const hostCtx = await browser.newContext();
-  const code = await createGame(hostCtx.request, "J1");
-  players.push({ req: hostCtx.request, nickname: "J1" });
+  // Host cria a sala
+  const hostReq = await requestFactory.newContext({ baseURL: BASE_URL });
+  const code = await createGame(hostReq, "J1");
+  players.push({ req: hostReq, nickname: "J1" });
 
+  // Demais jogadores entram com seus próprios contextos
   for (let i = 1; i < playerCount; i++) {
-    const ctx = await browser.newContext();
+    const req = await requestFactory.newContext({ baseURL: BASE_URL });
     const nickname = `J${i + 1}`;
-    await joinGame(ctx.request, code, nickname);
-    players.push({ req: ctx.request, nickname });
+    await joinGame(req, code, nickname);
+    players.push({ req, nickname });
   }
 
   if (mode && mode !== "classic") {
@@ -101,7 +112,6 @@ export async function playOneRound(
   // Modo Odyssey (classic 7+ jogadores) — host precisa resolver manualmente
   const gameMode = (await getMe(players[0].req, code)).game.mode;
   if (players.length >= 7 && gameMode === "classic") {
-    // Aguarda 1s para dar tempo dos votos primários chegarem e depois resolve
     await new Promise((r) => setTimeout(r, 1000));
     const state = await getRound(players[0].req, code);
     if (state.round?.phase === "voting") {
