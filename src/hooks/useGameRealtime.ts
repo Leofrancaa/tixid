@@ -91,6 +91,8 @@ export function useGameRealtime(gameId: string) {
   const [stellaReveals, setStellaReveals] = useState<StellaRevealRow[]>([]);
 
   const refetch = useCallback(async () => {
+    const t0 = performance.now();
+    console.log("[rt.refetch] start", { gameId });
     const supabase = createSupabaseBrowserClient();
     const [g, p, r] = await Promise.all([
       supabase.from("games").select("*").eq("id", gameId).single(),
@@ -107,6 +109,16 @@ export function useGameRealtime(gameId: string) {
         .limit(1)
         .maybeSingle(),
     ]);
+    const dt = Math.round(performance.now() - t0);
+    console.log("[rt.refetch] done", {
+      ms: dt,
+      gameStatus: (g.data as { status?: string } | null)?.status,
+      gameError: g.error?.message,
+      playersCount: p.data?.length,
+      playersError: p.error?.message,
+      roundPhase: (r.data as { phase?: string } | null)?.phase,
+      roundError: r.error?.message,
+    });
     if (g.data) setGame(g.data as GameRow);
     if (p.data) setPlayers(p.data as PublicPlayer[]);
     if (r.data) {

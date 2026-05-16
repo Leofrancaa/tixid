@@ -39,20 +39,46 @@ export default function GameClient({
   const gameEverLoaded = useRef(false);
 
   const refreshMe = useCallback(async (): Promise<MeData | null> => {
-    const res = await fetch(`/api/games/${code}/me`, { cache: "no-store" });
-    if (res.status === 404) { window.location.href = "/"; return null; }
-    if (res.ok) {
-      const data = (await res.json()) as MeData;
-      setMe(data);
-      return data;
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`/api/games/${code}/me`, { cache: "no-store" });
+      const dt = Math.round(performance.now() - t0);
+      if (res.status === 404) {
+        console.log("[gc.refreshMe] 404 → redirect", { ms: dt });
+        window.location.href = "/";
+        return null;
+      }
+      if (res.ok) {
+        const data = (await res.json()) as MeData;
+        console.log("[gc.refreshMe] ok", {
+          ms: dt,
+          status: data.game?.status,
+          mode: data.game?.mode,
+          handLen: data.hand?.length,
+          currentRoundId: data.game?.currentRoundId,
+        });
+        setMe(data);
+        return data;
+      }
+      console.warn("[gc.refreshMe] non-ok", { status: res.status, ms: dt });
+      return null;
+    } catch (e) {
+      console.error("[gc.refreshMe] threw", e);
+      return null;
     }
-    return null;
   }, [code]);
 
   const { refetch } = rt;
 
   const syncGameState = useCallback(async () => {
-    await Promise.all([refreshMe(), refetch()]);
+    console.log("[gc.syncGameState] start");
+    const [meRes, rtRes] = await Promise.allSettled([refreshMe(), refetch()]);
+    console.log("[gc.syncGameState] done", {
+      me: meRes.status,
+      rt: rtRes.status,
+      meReason: meRes.status === "rejected" ? String(meRes.reason) : undefined,
+      rtReason: rtRes.status === "rejected" ? String(rtRes.reason) : undefined,
+    });
   }, [refreshMe, refetch]);
 
   // Fast poll: 3s in lobby (to catch game-start quickly), 8s once playing

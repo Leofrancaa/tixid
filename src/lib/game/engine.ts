@@ -130,25 +130,27 @@ function findNextStellaScout({
 }
 
 export async function startGame(gameId: string) {
+  const log = (step: string, extra?: Record<string, unknown>) =>
+    console.log(`[engine.startGame] ${step}`, { gameId, ...(extra ?? {}) });
+
+  log("entered");
   const [game] = await db.select().from(games).where(eq(games.id, gameId));
   if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
+  log("loaded game", { status: game.status, mode: game.mode, currentRoundId: game.currentRoundId });
 
-  // Idempotent recovery: a previous startGame may have partially completed
-  // (created round 1, set hands) but failed before flipping status to
-  // "playing" — e.g. a Vercel function timeout. Without this guard, the next
-  // /start attempt throws a unique-constraint violation on rounds.round_number
-  // and the user is permanently stuck on the lobby. So: if round 1 already
-  // exists, finish the transition using the existing round instead of trying
-  // to insert again.
   if (game.status === "playing" && game.currentRoundId) {
     const [existing] = await db
       .select()
       .from(rounds)
       .where(eq(rounds.id, game.currentRoundId));
-    if (existing) return existing;
+    if (existing) {
+      log("idempotent return (already playing)", { roundId: existing.id });
+      return existing;
+    }
   }
 
   const players = await getGamePlayers(gameId);
+  log("loaded players", { count: players.length });
   if (players.length < 3) throw new GameError("NOT_ENOUGH_PLAYERS", "Mín. 3 jogadores");
 
   const needed =
@@ -156,6 +158,7 @@ export async function startGame(gameId: string) {
       ? STELLA_GRID_SIZE + STELLA_ROW_SIZE * (STELLA_TOTAL_ROUNDS - 1)
       : players.length * HAND_SIZE;
   const deckIds = await getDeckIds(game.mode);
+  log("loaded deck", { needed, have: deckIds.length });
   if (deckIds.length < needed) {
     const label = game.mode === "questions" ? "perguntas" : "cartas";
     throw new GameError(
@@ -164,13 +167,14 @@ export async function startGame(gameId: string) {
     );
   }
 
-  // Look for an orphan round 1 left over from a previous failed attempt.
   const [orphan] = await db
     .select()
     .from(rounds)
     .where(and(eq(rounds.gameId, gameId), eq(rounds.roundNumber, 1)));
+  log("orphan check", { foundOrphan: !!orphan, orphanId: orphan?.id });
 
   const queue = await initQueue(gameId, game.mode);
+  log("queue initialized", { queueLen: queue.length });
   const storyteller = players[0];
   const round =
     orphan ??
@@ -180,10 +184,9 @@ export async function startGame(gameId: string) {
         .values({ gameId, roundNumber: 1, storytellerId: storyteller.id, phase: "clue" })
         .returning()
     )[0];
+  log("round ready", { roundId: round.id, fromOrphan: !!orphan });
 
   if (game.mode === "stella") {
-    // Re-init stella round only if we created it now; otherwise the grid /
-    // player rows from the orphan attempt are still there and reusable.
     if (!orphan) {
       await initStellaRound(round.id, players, queue.slice(0, STELLA_GRID_SIZE));
     }
@@ -191,6 +194,7 @@ export async function startGame(gameId: string) {
       .update(games)
       .set({ cardQueue: queue.slice(STELLA_GRID_SIZE) })
       .where(eq(games.id, gameId));
+    log("stella init done");
   } else {
     for (let i = 0; i < players.length; i++) {
       const hand = queue.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE);
@@ -203,12 +207,14 @@ export async function startGame(gameId: string) {
       .update(games)
       .set({ cardQueue: queue.slice(players.length * HAND_SIZE) })
       .where(eq(games.id, gameId));
+    log("hands distributed");
   }
 
   await db
     .update(games)
     .set({ status: "playing", currentRoundId: round.id })
     .where(eq(games.id, gameId));
+  log("status flipped to playing", { roundId: round.id });
 
   return round;
 }

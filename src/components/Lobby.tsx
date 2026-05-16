@@ -93,23 +93,30 @@ export default function Lobby({
 
   async function start() {
     if (switching) return;
+    console.log("[lobby.start] click", { code, mode: displayMode, players: players.length });
     setStarting(true);
     setErr(null);
     try {
+      console.log("[lobby.start] POST /start ...");
+      const t0 = performance.now();
       const res = await fetch(`/api/games/${code}/start`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
+      const dt = Math.round(performance.now() - t0);
+      console.log("[lobby.start] /start responded", { status: res.status, ms: dt });
+      const data = await res.json().catch((e) => ({ __parseError: String(e) }));
+      console.log("[lobby.start] /start body", data);
       if (!res.ok) {
-        setErr(data.error ?? "Erro ao iniciar. Tente novamente.");
+        setErr(data.error ?? `Erro ao iniciar (HTTP ${res.status}).`);
         setStarting(false);
         return;
       }
-      // Fire-and-forget the refresh so a slow /me or supabase call can't leave
-      // the button stuck on "Iniciando partida...". The polling in GameClient
-      // (3s in lobby) will pick up the new state regardless.
-      Promise.resolve(onStarted?.()).catch(() => {});
+      Promise.resolve(onStarted?.())
+        .then(() => console.log("[lobby.start] onStarted resolved"))
+        .catch((e) => console.error("[lobby.start] onStarted failed", e));
       setStarting(false);
-    } catch {
-      setErr("Erro de conexão. Tente novamente.");
+      console.log("[lobby.start] flow done; awaiting state transition...");
+    } catch (e) {
+      console.error("[lobby.start] fetch threw", e);
+      setErr(`Erro de conexão: ${e instanceof Error ? e.message : String(e)}`);
       setStarting(false);
     }
   }
