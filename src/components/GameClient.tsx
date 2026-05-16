@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useGameRealtime } from "@/hooks/useGameRealtime";
 import Lobby from "./Lobby";
 import GameBoard from "./game/GameBoard";
@@ -38,7 +38,7 @@ export default function GameClient({
   const [me, setMe] = useState<MeData | null>(null);
   const gameEverLoaded = useRef(false);
 
-  async function refreshMe(): Promise<MeData | null> {
+  const refreshMe = useCallback(async (): Promise<MeData | null> => {
     const res = await fetch(`/api/games/${code}/me`, { cache: "no-store" });
     if (res.status === 404) { window.location.href = "/"; return null; }
     if (res.ok) {
@@ -47,18 +47,25 @@ export default function GameClient({
       return data;
     }
     return null;
-  }
+  }, [code]);
 
-  async function syncGameState() {
-    await Promise.all([refreshMe(), rt.refetch()]);
-  }
+  const { refetch } = rt;
 
+  const syncGameState = useCallback(async () => {
+    await Promise.all([refreshMe(), refetch()]);
+  }, [refreshMe, refetch]);
+
+  // Fast poll: 3s in lobby (to catch game-start quickly), 8s once playing
+  useEffect(() => {
+    const interval = me?.game.status === "lobby" || !me ? 3000 : 8000;
+    const iv = setInterval(refreshMe, interval);
+    return () => clearInterval(iv);
+  }, [refreshMe, me?.game.status]);
+
+  // Immediate fetch on mount
   useEffect(() => {
     refreshMe();
-    const iv = setInterval(refreshMe, 12000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshMe]);
 
   // Heartbeat — keeps presence alive and triggers cleanup when everyone leaves
   useEffect(() => {
@@ -75,20 +82,25 @@ export default function GameClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  const rtPhase = rt.round?.phase;
+  const rtRoundId = rt.round?.id;
+  const rtStatus = rt.game?.status;
   useEffect(() => {
     refreshMe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.round?.phase, rt.round?.id, rt.game?.status]);
+  }, [rtPhase, rtRoundId, rtStatus, refreshMe]);
 
   // Fallback: if me says game is playing but realtime didn't deliver the round,
   // force a refetch so GameBoard doesn't stay stuck on "Carregando rodada...".
+  const rtRound = rt.round;
+  const meCurrentRoundId = me?.game.currentRoundId;
+  const meStatus = me?.game.status;
   useEffect(() => {
-    const playing = (rt.game?.status ?? me?.game.status ?? "lobby") !== "lobby";
-    const needsRound = !rt.round && !!me?.game.currentRoundId;
+    const playing = (rtStatus ?? meStatus ?? "lobby") !== "lobby";
+    const needsRound = !rtRound && !!meCurrentRoundId;
     if (playing && needsRound) {
-      rt.refetch();
+      refetch();
     }
-  }, [rt, me?.game.status, me?.game.currentRoundId]);
+  }, [rtStatus, meStatus, rtRound, meCurrentRoundId, refetch]);
 
   if (rt.game) {
     gameEverLoaded.current = true;
@@ -148,6 +160,7 @@ export default function GameClient({
       gameStatus={effectiveStatus}
       targetScore={rt.game.target_score ?? 30}
       mode={effectiveMode}
+      onRefresh={syncGameState}
     />
   );
 }

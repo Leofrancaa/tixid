@@ -240,3 +240,17 @@ body::after {
   color: rgba(201, 168, 76, 0.8);
   background: rgba(201, 168, 76, 0.06);
 }
+
+/* Streak halo — pulsing fire glow for players on a 3+ scoring streak */
+@keyframes streakPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px #ff6a00) drop-shadow(0 0 6px rgba(255, 61, 0, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px #ff8a00) drop-shadow(0 0 12px rgba(255, 90, 0, 0.9));
+  }
+}
+
+.streak-pulse {
+  animation: streakPulse 1.4s ease-in-out infinite;
+}

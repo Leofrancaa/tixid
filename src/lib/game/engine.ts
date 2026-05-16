@@ -275,14 +275,24 @@ export async function submitCard(roundId: string, playerId: string, cardId: stri
     .where(eq(roundSubmissions.roundId, roundId));
 
   if (subs.length === expected) {
-    const shuffled = shuffle(subs);
-    for (let i = 0; i < shuffled.length; i++) {
-      await db
-        .update(roundSubmissions)
-        .set({ displayOrder: i })
-        .where(eq(roundSubmissions.id, shuffled[i].id));
+    // Atomic claim: only one concurrent submitCard wins the submitting → voting
+    // transition. Without this, two simultaneous final submissions could both
+    // shuffle display_order (last write wins, but wasteful) and both fire phase
+    // updates.
+    const claimed = await db
+      .update(rounds)
+      .set({ phase: "voting" })
+      .where(and(eq(rounds.id, roundId), eq(rounds.phase, "submitting")))
+      .returning();
+    if (claimed.length > 0) {
+      const shuffled = shuffle(subs);
+      for (let i = 0; i < shuffled.length; i++) {
+        await db
+          .update(roundSubmissions)
+          .set({ displayOrder: i })
+          .where(eq(roundSubmissions.id, shuffled[i].id));
+      }
     }
-    await db.update(rounds).set({ phase: "voting" }).where(eq(rounds.id, roundId));
   }
 
   return sub;
@@ -344,6 +354,17 @@ export async function submitStellaSelection(
   );
   if (!allSubmitted) return;
 
+  // Atomic claim: only one concurrent final submitter sets selectionCount /
+  // inDark / isCurrentScout. Without this, two simultaneous final stella
+  // submissions could both run the dark-player computation and both transition
+  // phase, doubling work and potentially re-flagging scouts.
+  const claimed = await db
+    .update(rounds)
+    .set({ phase: "voting" })
+    .where(and(eq(rounds.id, roundId), eq(rounds.phase, "submitting")))
+    .returning();
+  if (claimed.length === 0) return;
+
   const selectionMap = await getStellaSelectionMap(roundId);
   const counts = players.map((p) => ({
     playerId: p.id,
@@ -363,13 +384,21 @@ export async function submitStellaSelection(
       })
       .where(and(eq(stellaPlayerRounds.roundId, roundId), eq(stellaPlayerRounds.playerId, row.playerId)));
   }
-
-  await db.update(rounds).set({ phase: "voting" }).where(eq(rounds.id, roundId));
 }
 
 async function finishStellaReveal(roundId: string) {
   const [round] = await db.select().from(rounds).where(eq(rounds.id, roundId));
   if (!round) throw new GameError("ROUND_NOT_FOUND", "Rodada nao encontrada");
+
+  // Atomic claim: only the first concurrent caller scores and transitions
+  // voting → reveal. Prevents double-scoring when the last reveal and a
+  // manual /resolve race each other.
+  const claimed = await db
+    .update(rounds)
+    .set({ phase: "reveal", endedAt: new Date() })
+    .where(and(eq(rounds.id, roundId), eq(rounds.phase, "voting")))
+    .returning();
+  if (claimed.length === 0) return;
 
   const playerRows = await db
     .select()
@@ -402,16 +431,20 @@ async function finishStellaReveal(roundId: string) {
         .set({ score: sql`${gamePlayers.score} + ${finalDelta}` })
         .where(eq(gamePlayers.id, row.playerId));
     }
+
+    // Streak: scored this stella round → +1, otherwise reset to 0.
+    await db
+      .update(gamePlayers)
+      .set({
+        currentStreak: finalDelta > 0 ? sql`${gamePlayers.currentStreak} + 1` : 0,
+      })
+      .where(eq(gamePlayers.id, row.playerId));
   }
 
   await db
     .update(stellaPlayerRounds)
     .set({ isCurrentScout: false })
     .where(eq(stellaPlayerRounds.roundId, roundId));
-  await db
-    .update(rounds)
-    .set({ phase: "reveal", endedAt: new Date() })
-    .where(eq(rounds.id, roundId));
 }
 
 export async function revealStellaCard(roundId: string, playerId: string, cardId: string) {
@@ -614,6 +647,16 @@ export async function resolveRound(roundId: string) {
     return;
   }
 
+  // Atomic claim: only the first concurrent caller wins the voting → reveal
+  // transition. Prevents double-scoring when two votes arrive simultaneously
+  // and both call resolveRound. Subsequent callers no-op.
+  const claimed = await db
+    .update(rounds)
+    .set({ phase: "reveal", endedAt: new Date() })
+    .where(and(eq(rounds.id, roundId), eq(rounds.phase, "voting")))
+    .returning();
+  if (claimed.length === 0) return;
+
   const players = await getGamePlayers(round.gameId);
   const subs = await db
     .select()
@@ -656,10 +699,16 @@ export async function resolveRound(roundId: string) {
       .where(eq(gamePlayers.id, pid));
   }
 
-  await db
-    .update(rounds)
-    .set({ phase: "reveal", endedAt: new Date() })
-    .where(eq(rounds.id, roundId));
+  // Streak: every player who scored this round (delta > 0) gets +1; the rest reset to 0.
+  for (const player of players) {
+    const scored = (delta[player.id] ?? 0) > 0;
+    await db
+      .update(gamePlayers)
+      .set({
+        currentStreak: scored ? sql`${gamePlayers.currentStreak} + 1` : 0,
+      })
+      .where(eq(gamePlayers.id, player.id));
+  }
 }
 
 export async function nextRound(gameId: string) {
@@ -771,6 +820,53 @@ export async function nextRound(gameId: string) {
     .where(eq(games.id, gameId));
 
   return { finished: false as const, round: newRound };
+}
+
+// Once per game, a player may discard a card from their hand and draw the
+// next one from the unused deck queue. The discarded card is removed from
+// circulation for the rest of the game (NOT returned to the queue).
+export async function sacrificeCard(
+  gameId: string,
+  playerId: string,
+  cardId: string
+) {
+  const [game] = await db.select().from(games).where(eq(games.id, gameId));
+  if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
+  if (game.status !== "playing")
+    throw new GameError("GAME_NOT_PLAYING", "Partida não está em andamento");
+  if (game.mode === "stella")
+    throw new GameError("NOT_AVAILABLE_STELLA", "Sacrifício não disponível no modo Stella");
+
+  const [player] = await db
+    .select()
+    .from(gamePlayers)
+    .where(eq(gamePlayers.id, playerId));
+  if (!player || player.gameId !== gameId)
+    throw new GameError("NOT_PLAYER", "Jogador inválido");
+  if (player.sacrificeUsed)
+    throw new GameError("ALREADY_USED", "Você já sacrificou uma carta nesta partida");
+
+  const hand = (player.hand as string[]) ?? [];
+  if (!hand.includes(cardId))
+    throw new GameError("CARD_NOT_IN_HAND", "Carta não está na sua mão");
+
+  const queue = (game.cardQueue as string[]) ?? [];
+  if (queue.length === 0)
+    throw new GameError("DECK_EMPTY", "Não há mais cartas no deck para trocar");
+
+  const [drawn, ...remainingQueue] = queue;
+  const newHand = hand.map((id) => (id === cardId ? drawn : id));
+
+  await db
+    .update(gamePlayers)
+    .set({ hand: newHand, sacrificeUsed: true })
+    .where(eq(gamePlayers.id, playerId));
+  await db
+    .update(games)
+    .set({ cardQueue: remainingQueue })
+    .where(eq(games.id, gameId));
+
+  return { drawnCardId: drawn };
 }
 
 export { getGamePlayers };

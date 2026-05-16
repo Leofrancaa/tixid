@@ -8,6 +8,8 @@ export interface PublicPlayer {
   nickname: string;
   seat_order: number;
   score: number;
+  current_streak: number;
+  sacrifice_used: boolean;
   connected: boolean;
 }
 
@@ -232,6 +234,14 @@ export function useGameRealtime(gameId: string) {
         },
         (payload) => {
           const row = payload.new as RoundRow;
+          // New round detected (INSERT or different id) → clear stale
+          // votes/submissions from the previous round so the UI doesn't
+          // show "already voted" / phantom submissions until the next
+          // INSERT for the new round arrives.
+          if (payload.eventType === "INSERT") {
+            setVotes([]);
+            setSubmissions([]);
+          }
           setRound((cur) => {
             if (!cur || row.round_number >= cur.round_number) return row;
             return cur;

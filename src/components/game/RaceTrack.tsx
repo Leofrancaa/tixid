@@ -25,6 +25,8 @@ function tokenLabel(seatOrder: number) {
   return String(seatOrder + 1);
 }
 
+const STREAK_THRESHOLD = 3;
+
 export default function RaceTrack({
   players,
   myId,
@@ -76,24 +78,44 @@ export default function RaceTrack({
               </button>
             )}
             <div className="flex max-w-[60vw] flex-wrap items-center justify-end gap-2 sm:max-w-none">
-              {players.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setDetailsOpen(true)}
-                  className="flex items-center gap-1 rounded transition hover:bg-dixit-gold/5"
-                  title={`${p.nickname}: ${p.score}`}
-                >
-                  <span
-                    className="inline-flex h-4 w-4 items-center justify-center rounded-full font-label text-[9px] font-bold text-ink"
-                    style={{ backgroundColor: tokenColor(p.seat_order) }}
+              {players.map((p) => {
+                const onStreak = (p.current_streak ?? 0) >= STREAK_THRESHOLD;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setDetailsOpen(true)}
+                    className="flex items-center gap-1 rounded transition hover:bg-dixit-gold/5"
+                    title={
+                      onStreak
+                        ? `${p.nickname}: ${p.score} — ${p.current_streak} rodadas em chamas`
+                        : `${p.nickname}: ${p.score}`
+                    }
                   >
-                    {tokenLabel(p.seat_order)}
-                  </span>
-                  <span className={`font-label text-xs ${p.id === myId ? "font-semibold text-dixit-gold" : "text-parchment/40"}`}>
-                    {p.score}
-                  </span>
-                </button>
-              ))}
+                    <span
+                      className={`relative inline-flex h-4 w-4 items-center justify-center rounded-full font-label text-[9px] font-bold text-ink ${onStreak ? "streak-pulse" : ""}`}
+                      style={{
+                        backgroundColor: tokenColor(p.seat_order),
+                        boxShadow: onStreak
+                          ? "0 0 4px #ff6a00, 0 0 8px #ff3d00"
+                          : undefined,
+                      }}
+                    >
+                      {tokenLabel(p.seat_order)}
+                      {onStreak && (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute -right-1.5 -top-1.5 select-none text-[9px] leading-none"
+                        >
+                          🔥
+                        </span>
+                      )}
+                    </span>
+                    <span className={`font-label text-xs ${p.id === myId ? "font-semibold text-dixit-gold" : "text-parchment/40"}`}>
+                      {p.score}
+                    </span>
+                  </button>
+                );
+              })}
               <span className="font-label text-xs text-parchment/20">/{targetScore}</span>
             </div>
           </div>
@@ -138,27 +160,45 @@ export default function RaceTrack({
 
                   {tokens.length > 0 && (
                     <div className="flex flex-wrap justify-center gap-px">
-                      {tokens.map(({ player }) => (
-                        <button
-                          key={player.id}
-                          onClick={() => setDetailsOpen(true)}
-                          title={player.nickname}
-                          className="inline-flex items-center justify-center rounded-full font-label font-bold text-ink transition-all duration-700"
-                          style={{
-                            width: "clamp(10px, 1.6vw, 14px)",
-                            height: "clamp(10px, 1.6vw, 14px)",
-                            fontSize: "clamp(6px, 0.8vw, 8px)",
-                            backgroundColor: tokenColor(player.seat_order),
-                            boxShadow:
-                              player.id === myId
-                                ? `0 0 5px ${tokenColor(player.seat_order)}`
-                                : "none",
-                            opacity: player.id === myId ? 1 : 0.8,
-                          }}
-                        >
-                          {tokenLabel(player.seat_order)}
-                        </button>
-                      ))}
+                      {tokens.map(({ player }) => {
+                        const onStreak = (player.current_streak ?? 0) >= STREAK_THRESHOLD;
+                        const baseShadow = player.id === myId
+                          ? `0 0 5px ${tokenColor(player.seat_order)}`
+                          : "none";
+                        const streakShadow =
+                          "0 0 4px #ff6a00, 0 0 8px #ff3d00, 0 0 12px rgba(255,90,0,0.6)";
+                        return (
+                          <button
+                            key={player.id}
+                            onClick={() => setDetailsOpen(true)}
+                            title={
+                              onStreak
+                                ? `${player.nickname} — ${player.current_streak} rodadas em chamas`
+                                : player.nickname
+                            }
+                            className={`relative inline-flex items-center justify-center rounded-full font-label font-bold text-ink transition-all duration-700 ${onStreak ? "streak-pulse" : ""}`}
+                            style={{
+                              width: "clamp(10px, 1.6vw, 14px)",
+                              height: "clamp(10px, 1.6vw, 14px)",
+                              fontSize: "clamp(6px, 0.8vw, 8px)",
+                              backgroundColor: tokenColor(player.seat_order),
+                              boxShadow: onStreak ? streakShadow : baseShadow,
+                              opacity: player.id === myId ? 1 : 0.8,
+                            }}
+                          >
+                            {tokenLabel(player.seat_order)}
+                            {onStreak && (
+                              <span
+                                aria-hidden
+                                className="pointer-events-none absolute -right-1 -top-1 select-none"
+                                style={{ fontSize: "clamp(7px, 1vw, 9px)", lineHeight: 1 }}
+                              >
+                                🔥
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -232,27 +272,49 @@ export default function RaceTrack({
               </button>
             </div>
             <div className="divide-y divide-white/5">
-              {sortedPlayers.map((player) => (
-                <div key={player.id} className="flex items-center gap-3 py-3">
-                  <span
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-label text-xs font-bold text-ink"
-                    style={{ backgroundColor: tokenColor(player.seat_order) }}
-                  >
-                    {tokenLabel(player.seat_order)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-serif text-sm text-parchment/90">
-                      {player.nickname}
-                    </p>
-                    <p className="font-label text-[10px] uppercase tracking-widest text-parchment/30">
-                      Cor {tokenColor(player.seat_order)}
-                    </p>
+              {sortedPlayers.map((player) => {
+                const onStreak = (player.current_streak ?? 0) >= STREAK_THRESHOLD;
+                return (
+                  <div key={player.id} className="flex items-center gap-3 py-3">
+                    <span
+                      className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-label text-xs font-bold text-ink ${onStreak ? "streak-pulse" : ""}`}
+                      style={{
+                        backgroundColor: tokenColor(player.seat_order),
+                        boxShadow: onStreak
+                          ? "0 0 6px #ff6a00, 0 0 12px #ff3d00"
+                          : undefined,
+                      }}
+                    >
+                      {tokenLabel(player.seat_order)}
+                      {onStreak && (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute -right-1.5 -top-2 select-none text-xs leading-none"
+                        >
+                          🔥
+                        </span>
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-serif text-sm text-parchment/90">
+                        {player.nickname}
+                      </p>
+                      {onStreak ? (
+                        <p className="font-label text-[10px] uppercase tracking-widest text-orange-300/80">
+                          🔥 {player.current_streak} rodadas em chamas
+                        </p>
+                      ) : (
+                        <p className="font-label text-[10px] uppercase tracking-widest text-parchment/30">
+                          Cor {tokenColor(player.seat_order)}
+                        </p>
+                      )}
+                    </div>
+                    <span className="font-label text-sm font-semibold text-dixit-gold">
+                      {player.score}
+                    </span>
                   </div>
-                  <span className="font-label text-sm font-semibold text-dixit-gold">
-                    {player.score}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

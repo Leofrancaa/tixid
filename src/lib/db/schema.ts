@@ -63,6 +63,8 @@ export const gamePlayers = pgTable(
     playerToken: text("player_token").notNull(),
     seatOrder: integer("seat_order").notNull(),
     score: integer("score").notNull().default(0),
+    currentStreak: integer("current_streak").notNull().default(0),
+    sacrificeUsed: boolean("sacrifice_used").notNull().default(false),
     hand: jsonb("hand").notNull().default(sql`'[]'::jsonb`),
     connected: boolean("connected").notNull().default(true),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),

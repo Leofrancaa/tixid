@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { RoundSkeleton } from "@/components/ui/Skeleton";
 import CardZoom from "./CardZoom";
 import RaceTrack from "./RaceTrack";
+import SacrificeModal from "./SacrificeModal";
 import type { HandCard } from "./shared/Hand";
 import type { DeckItemData } from "./shared/DeckItem";
 import CluePhase from "./phases/CluePhase";
@@ -41,6 +42,7 @@ export default function GameBoard({
   gameStatus,
   targetScore,
   mode,
+  onRefresh,
 }: {
   code: string;
   myPlayerId: string;
@@ -57,6 +59,7 @@ export default function GameBoard({
   gameStatus: string;
   targetScore: number;
   mode: "classic" | "questions" | "stella";
+  onRefresh: () => Promise<void> | void;
 }) {
   const [clue, setClue] = useState("");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export default function GameBoard({
   const [zoomedItem, setZoomedItem] = useState<DeckItemData | null>(null);
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
   const [endingGame, setEndingGame] = useState(false);
+  const [sacrificeOpen, setSacrificeOpen] = useState(false);
 
   useEffect(() => {
     setMyStellaSelectionIds(stellaSelectionIds);
@@ -118,9 +122,16 @@ export default function GameBoard({
 
   if (!round) return <RoundSkeleton />;
 
+  // Defensive filter: only consider submissions/votes from the current round
+  // to prevent stale rows (from the previous round) leaking into the UI before
+  // the realtime hook syncs — e.g. showing "already voted" before the player
+  // voted in the new round.
+  const currentSubmissions = submissions.filter((s) => s.round_id === round.id);
+  const currentVotes = votes.filter((v) => v.round_id === round.id);
+
   const storyteller = players.find((p) => p.id === round.storyteller_id);
   const imStoryteller = round.storyteller_id === myPlayerId;
-  const mySubmission = submissions.find((s) => s.player_id === myPlayerId);
+  const mySubmission = currentSubmissions.find((s) => s.player_id === myPlayerId);
 
   async function doClue() {
     const isStella = mode === "stella";
@@ -231,6 +242,31 @@ export default function GameBoard({
     setBusy(false);
   }
 
+  async function doSacrifice(cardId: string) {
+    const res = await fetch(`/api/games/${code}/sacrifice`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cardId }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErr(data.error ?? "Falha ao sacrificar carta.");
+      return;
+    }
+    // Refresh hand + players so the new card and sacrifice_used = true land in state.
+    await onRefresh();
+    setSacrificeOpen(false);
+  }
+
+  const me = players.find((p) => p.id === myPlayerId);
+  const canSacrifice =
+    mode !== "stella" &&
+    gameStatus === "playing" &&
+    round.phase !== "finished" &&
+    !!me &&
+    !me.sacrifice_used &&
+    hand.length > 0;
+
   const phaseLabel: Record<string, string> = {
     clue: mode === "questions" ? "Pergunta + Resposta" : mode === "stella" ? "Definir Tema" : "Fase da Dica",
     submitting: mode === "stella" ? "Seleção Secreta" : mode === "questions" ? "Escolha de Pergunta" : "Escolha de Cartas",
@@ -274,6 +310,15 @@ export default function GameBoard({
           <div className="flex items-center gap-2">
             <span className="phase-badge">{phaseLabel[round.phase] ?? round.phase}</span>
             <span className="font-label text-xs text-parchment/30">R{round.round_number}</span>
+            {canSacrifice && (
+              <button
+                onClick={() => setSacrificeOpen(true)}
+                className="btn-ghost px-2 py-1 text-[10px] text-dixit-gold/70 border-dixit-gold/25 hover:text-dixit-gold hover:border-dixit-gold/50"
+                title="Trocar 1 carta da sua mão (1 vez por partida)"
+              >
+                🔁 trocar
+              </button>
+            )}
             {isHost && (
               <button
                 onClick={() => setConfirmEndOpen(true)}
@@ -345,7 +390,7 @@ export default function GameBoard({
             <SubmitPhase
               imStoryteller={imStoryteller}
               mySubmission={mySubmission}
-              submissions={submissions}
+              submissions={currentSubmissions}
               round={round}
               playerCount={players.length}
               hand={hand}
@@ -358,12 +403,12 @@ export default function GameBoard({
             />
           ) : round.phase === "voting" ? (
             <VotePhase
-              submissions={submissions}
+              submissions={currentSubmissions}
               itemMap={itemMap}
               mySubmission={mySubmission}
               onVote={doVote}
               onResolve={doResolve}
-              votes={votes}
+              votes={currentVotes}
               myPlayerId={myPlayerId}
               imStoryteller={imStoryteller}
               isHost={isHost}
@@ -375,8 +420,8 @@ export default function GameBoard({
             />
           ) : round.phase === "reveal" ? (
             <RevealPhase
-              submissions={submissions}
-              votes={votes}
+              submissions={currentSubmissions}
+              votes={currentVotes}
               players={players}
               storytellerCardId={round.storyteller_card_id}
               itemMap={itemMap}
@@ -407,6 +452,14 @@ export default function GameBoard({
         busy={endingGame}
         onConfirm={doDeleteGame}
         onCancel={() => setConfirmEndOpen(false)}
+      />
+
+      <SacrificeModal
+        open={sacrificeOpen}
+        hand={hand}
+        mode={mode}
+        onConfirm={doSacrifice}
+        onClose={() => setSacrificeOpen(false)}
       />
     </>
   );

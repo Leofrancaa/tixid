@@ -112,6 +112,19 @@ export default function VotePhase({
           </p>
         )}
         <p className="mt-1.5 font-label text-xs text-parchment/35">{statusText()}</p>
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-dixit-gold/20 bg-dixit-gold/5 px-3 py-1">
+          <span className="font-label text-[10px] uppercase tracking-widest text-parchment/40">
+            Votos
+          </span>
+          <span className={`font-label text-xs font-semibold ${allPrimaryIn ? "text-dixit-gold" : "text-parchment/70"}`}>
+            {primaryVotesCount} / {isStella ? playerCount : nonStorytellerCount}
+          </span>
+          {odysseyEnabled && secondaryVotesCount > 0 && (
+            <span className="font-label text-[10px] text-dixit-rose/70">
+              · {secondaryVotesCount} sec.
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
