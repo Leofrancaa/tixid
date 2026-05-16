@@ -28,6 +28,15 @@ export async function POST(
   } catch (e) {
     if (e instanceof GameError)
       return NextResponse.json({ error: e.message, code: e.code }, { status: 400 });
-    throw e;
+    console.error("[start route] startGame failed:", {
+      gameId: game.id,
+      code,
+      mode: game.mode,
+      error: e instanceof Error ? { message: e.message, stack: e.stack } : String(e),
+    });
+    return NextResponse.json(
+      { error: "Falha ao iniciar partida", detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 }
+    );
   }
 }

@@ -133,6 +133,21 @@ export async function startGame(gameId: string) {
   const [game] = await db.select().from(games).where(eq(games.id, gameId));
   if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
 
+  // Idempotent recovery: a previous startGame may have partially completed
+  // (created round 1, set hands) but failed before flipping status to
+  // "playing" — e.g. a Vercel function timeout. Without this guard, the next
+  // /start attempt throws a unique-constraint violation on rounds.round_number
+  // and the user is permanently stuck on the lobby. So: if round 1 already
+  // exists, finish the transition using the existing round instead of trying
+  // to insert again.
+  if (game.status === "playing" && game.currentRoundId) {
+    const [existing] = await db
+      .select()
+      .from(rounds)
+      .where(eq(rounds.id, game.currentRoundId));
+    if (existing) return existing;
+  }
+
   const players = await getGamePlayers(gameId);
   if (players.length < 3) throw new GameError("NOT_ENOUGH_PLAYERS", "Mín. 3 jogadores");
 
@@ -149,15 +164,29 @@ export async function startGame(gameId: string) {
     );
   }
 
+  // Look for an orphan round 1 left over from a previous failed attempt.
+  const [orphan] = await db
+    .select()
+    .from(rounds)
+    .where(and(eq(rounds.gameId, gameId), eq(rounds.roundNumber, 1)));
+
   const queue = await initQueue(gameId, game.mode);
   const storyteller = players[0];
-  const [round] = await db
-    .insert(rounds)
-    .values({ gameId, roundNumber: 1, storytellerId: storyteller.id, phase: "clue" })
-    .returning();
+  const round =
+    orphan ??
+    (
+      await db
+        .insert(rounds)
+        .values({ gameId, roundNumber: 1, storytellerId: storyteller.id, phase: "clue" })
+        .returning()
+    )[0];
 
   if (game.mode === "stella") {
-    await initStellaRound(round.id, players, queue.slice(0, STELLA_GRID_SIZE));
+    // Re-init stella round only if we created it now; otherwise the grid /
+    // player rows from the orphan attempt are still there and reusable.
+    if (!orphan) {
+      await initStellaRound(round.id, players, queue.slice(0, STELLA_GRID_SIZE));
+    }
     await db
       .update(games)
       .set({ cardQueue: queue.slice(STELLA_GRID_SIZE) })

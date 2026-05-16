@@ -100,13 +100,16 @@ export default function Lobby({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setErr(data.error ?? "Erro ao iniciar. Tente novamente.");
-      } else {
-        // Trigger immediate refresh so transition doesn't depend only on realtime
-        await onStarted?.();
+        setStarting(false);
+        return;
       }
+      // Fire-and-forget the refresh so a slow /me or supabase call can't leave
+      // the button stuck on "Iniciando partida...". The polling in GameClient
+      // (3s in lobby) will pick up the new state regardless.
+      Promise.resolve(onStarted?.()).catch(() => {});
+      setStarting(false);
     } catch {
       setErr("Erro de conexão. Tente novamente.");
-    } finally {
       setStarting(false);
     }
   }
