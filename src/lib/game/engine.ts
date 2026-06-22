@@ -48,11 +48,11 @@ async function getDeckIds(mode: GameMode): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-async function initQueue(gameId: string, mode: GameMode): Promise<string[]> {
-  const ids = await getDeckIds(mode);
-  const shuffled = shuffle(ids);
-  await db.update(games).set({ cardQueue: shuffled }).where(eq(games.id, gameId));
-  return shuffled;
+// Embaralha os ids do deck já carregado. NÃO grava a fila no banco aqui — o
+// caller faz uma única gravação da fila final (já com as cartas distribuídas
+// removidas), economizando um roundtrip.
+function buildQueue(deckIds: string[]): string[] {
+  return shuffle(deckIds);
 }
 
 async function returnToQueue(gameId: string, cardIds: string[]): Promise<string[]> {
@@ -149,16 +149,29 @@ export async function startGame(gameId: string) {
     }
   }
 
-  const players = await getGamePlayers(gameId);
-  log("loaded players", { count: players.length });
+  // Leituras independentes em paralelo: jogadores, deck e round órfão.
+  const [players, deckIds, orphanRows] = await Promise.all([
+    getGamePlayers(gameId),
+    getDeckIds(game.mode),
+    db
+      .select()
+      .from(rounds)
+      .where(and(eq(rounds.gameId, gameId), eq(rounds.roundNumber, 1))),
+  ]);
+  const orphan = orphanRows[0];
+  log("loaded players/deck/orphan", {
+    players: players.length,
+    deck: deckIds.length,
+    foundOrphan: !!orphan,
+    orphanId: orphan?.id,
+  });
+
   if (players.length < 3) throw new GameError("NOT_ENOUGH_PLAYERS", "Mín. 3 jogadores");
 
   const needed =
     game.mode === "stella"
       ? STELLA_GRID_SIZE + STELLA_ROW_SIZE * (STELLA_TOTAL_ROUNDS - 1)
       : players.length * HAND_SIZE;
-  const deckIds = await getDeckIds(game.mode);
-  log("loaded deck", { needed, have: deckIds.length });
   if (deckIds.length < needed) {
     const label = game.mode === "questions" ? "perguntas" : "cartas";
     throw new GameError(
@@ -167,14 +180,8 @@ export async function startGame(gameId: string) {
     );
   }
 
-  const [orphan] = await db
-    .select()
-    .from(rounds)
-    .where(and(eq(rounds.gameId, gameId), eq(rounds.roundNumber, 1)));
-  log("orphan check", { foundOrphan: !!orphan, orphanId: orphan?.id });
-
-  const queue = await initQueue(gameId, game.mode);
-  log("queue initialized", { queueLen: queue.length });
+  const queue = buildQueue(deckIds);
+  log("queue built", { queueLen: queue.length });
   const storyteller = players[0];
   const round =
     orphan ??
@@ -186,33 +193,32 @@ export async function startGame(gameId: string) {
     )[0];
   log("round ready", { roundId: round.id, fromOrphan: !!orphan });
 
+  // Cartas restantes na fila depois de montar a rodada inicial.
+  let remainingQueue: string[];
   if (game.mode === "stella") {
     if (!orphan) {
       await initStellaRound(round.id, players, queue.slice(0, STELLA_GRID_SIZE));
     }
-    await db
-      .update(games)
-      .set({ cardQueue: queue.slice(STELLA_GRID_SIZE) })
-      .where(eq(games.id, gameId));
+    remainingQueue = queue.slice(STELLA_GRID_SIZE);
     log("stella init done");
   } else {
-    for (let i = 0; i < players.length; i++) {
-      const hand = queue.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE);
-      await db
-        .update(gamePlayers)
-        .set({ hand })
-        .where(eq(gamePlayers.id, players[i].id));
-    }
-    await db
-      .update(games)
-      .set({ cardQueue: queue.slice(players.length * HAND_SIZE) })
-      .where(eq(games.id, gameId));
+    // Distribui as mãos em paralelo — updates independentes por jogador.
+    await Promise.all(
+      players.map((player, i) =>
+        db
+          .update(gamePlayers)
+          .set({ hand: queue.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE) })
+          .where(eq(gamePlayers.id, player.id))
+      )
+    );
+    remainingQueue = queue.slice(players.length * HAND_SIZE);
     log("hands distributed");
   }
 
+  // Uma única gravação em games: fila final + status + rodada atual.
   await db
     .update(games)
-    .set({ status: "playing", currentRoundId: round.id })
+    .set({ cardQueue: remainingQueue, status: "playing", currentRoundId: round.id })
     .where(eq(games.id, gameId));
   log("status flipped to playing", { roundId: round.id });
 
