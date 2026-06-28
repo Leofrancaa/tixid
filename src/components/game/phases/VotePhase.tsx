@@ -139,7 +139,7 @@ export default function VotePhase({
 
           if (isOwn) {
             return (
-              <div key={s.id} className="card-frame relative opacity-50">
+              <div key={s.id} className="card-frame relative opacity-[0.72]">
                 <DeckItem item={item} />
                 <div className="absolute inset-0 flex items-end">
                   <div className="w-full bg-ink/90 py-2 text-center font-label text-xs tracking-widest text-parchment/60 backdrop-blur-sm">
@@ -166,6 +166,7 @@ export default function VotePhase({
                 }
                 onZoom={onZoom}
                 disabled={(!canPrimary && !canSecondary) || blockedForSecondary}
+                dim={false}
                 selected={isPrimaryPending || isSecondaryPending || isMyPrimaryVote || isMySecondaryVote}
               />
 

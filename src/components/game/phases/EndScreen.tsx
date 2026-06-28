@@ -16,20 +16,47 @@ export default function EndScreen({
 }) {
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const winner = sorted[0];
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [action, setAction] = useState<null | "delete" | "leave">(null);
   const [busy, setBusy] = useState(false);
+  const [rematchBusy, setRematchBusy] = useState(false);
 
-  async function deleteGame() {
+  async function doDelete() {
     setBusy(true);
     const res = await fetch(`/api/games/${code}/delete`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       onError(data.error ?? "Falha ao encerrar sala. Tente novamente.");
       setBusy(false);
-      setConfirmOpen(false);
+      setAction(null);
       return;
     }
     window.location.href = "/";
+  }
+
+  async function doLeave() {
+    setBusy(true);
+    const res = await fetch(`/api/games/${code}/leave`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      onError(data.error ?? "Falha ao sair da partida. Tente novamente.");
+      setBusy(false);
+      setAction(null);
+      return;
+    }
+    window.location.href = "/";
+  }
+
+  async function doPlayAgain() {
+    setRematchBusy(true);
+    const res = await fetch(`/api/games/${code}/rematch`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      onError(data.error ?? "Falha ao reiniciar a partida. Tente novamente.");
+      setRematchBusy(false);
+      return;
+    }
+    // Game reset to lobby with the same players — reload to land back there.
+    window.location.reload();
   }
 
   return (
@@ -65,27 +92,55 @@ export default function EndScreen({
           ))}
         </ul>
 
-        {isHost ? (
-          <button onClick={() => setConfirmOpen(true)} className="btn-wine px-8 py-3 text-sm">
-            Encerrar e Apagar Partida
-          </button>
-        ) : (
-          <a href="/" className="btn-ghost inline-block px-8 py-3 text-sm">
-            Voltar ao Início
+        <div className="mx-auto flex max-w-sm flex-col gap-3">
+          {isHost && (
+            <button
+              onClick={doPlayAgain}
+              disabled={rematchBusy}
+              className="btn-gold px-8 py-3.5 text-sm"
+            >
+              {rematchBusy ? "Reiniciando…" : "🔄 Jogar de Novo — mesmas pessoas"}
+            </button>
+          )}
+
+          <a href="/" className="btn-ghost px-8 py-3 text-center text-sm">
+            ↩️ Voltar ao Início
           </a>
-        )}
+
+          {isHost ? (
+            <button onClick={() => setAction("delete")} className="btn-wine px-8 py-3 text-sm">
+              Encerrar e Apagar Partida
+            </button>
+          ) : (
+            <button onClick={() => setAction("leave")} className="btn-wine px-8 py-3 text-sm">
+              🚪 Sair da Partida
+            </button>
+          )}
+        </div>
       </section>
 
       <ConfirmDialog
-        open={confirmOpen}
+        open={action === "delete"}
         title="Encerrar partida?"
         message="A partida será apagada permanentemente e todos os jogadores serão desconectados."
         confirmLabel="Encerrar"
         cancelLabel="Cancelar"
         variant="danger"
         busy={busy}
-        onConfirm={deleteGame}
-        onCancel={() => setConfirmOpen(false)}
+        onConfirm={doDelete}
+        onCancel={() => setAction(null)}
+      />
+
+      <ConfirmDialog
+        open={action === "leave"}
+        title="Sair da partida?"
+        message="Você sairá desta sala. Se o host jogar de novo, você não entrará automaticamente."
+        confirmLabel="Sair"
+        cancelLabel="Cancelar"
+        variant="danger"
+        busy={busy}
+        onConfirm={doLeave}
+        onCancel={() => setAction(null)}
       />
     </>
   );

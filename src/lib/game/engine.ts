@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   cards,
@@ -908,6 +908,65 @@ export async function sacrificeCard(
     .where(eq(games.id, gameId));
 
   return { drawnCardId: drawn };
+}
+
+// "Jogar de novo com as mesmas pessoas": wipe the match state but keep the same
+// players (and host) in the room, sending everyone back to the lobby ready to
+// start a fresh game.
+export async function rematch(gameId: string) {
+  const [game] = await db.select().from(games).where(eq(games.id, gameId));
+  if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
+
+  // Deleting the rounds cascades submissions, votes and every stella_* row.
+  await db.delete(rounds).where(eq(rounds.gameId, gameId));
+
+  // Reset each player's per-match state — keep nickname / token / seat.
+  await db
+    .update(gamePlayers)
+    .set({ score: 0, currentStreak: 0, sacrificeUsed: false, hand: [] })
+    .where(eq(gamePlayers.gameId, gameId));
+
+  // Back to a clean lobby. Host stays the host; startGame rebuilds the queue.
+  await db
+    .update(games)
+    .set({ status: "lobby", currentRoundId: null, cardQueue: [] })
+    .where(eq(games.id, gameId));
+
+  return { ok: true as const };
+}
+
+// A player leaves the room. If the host leaves, hosting passes to the remaining
+// player with the lowest seat order; if nobody is left, the room is deleted.
+export async function leaveGame(gameId: string, playerId: string) {
+  const [game] = await db.select().from(games).where(eq(games.id, gameId));
+  if (!game) throw new GameError("GAME_NOT_FOUND", "Jogo não encontrado");
+
+  const [player] = await db
+    .select()
+    .from(gamePlayers)
+    .where(eq(gamePlayers.id, playerId));
+  if (!player || player.gameId !== gameId)
+    throw new GameError("NOT_PLAYER", "Jogador inválido");
+
+  if (game.hostPlayerId === playerId) {
+    const [nextHost] = await db
+      .select()
+      .from(gamePlayers)
+      .where(and(eq(gamePlayers.gameId, gameId), ne(gamePlayers.id, playerId)))
+      .orderBy(gamePlayers.seatOrder);
+    if (!nextHost) {
+      // Last one out turns off the lights.
+      await db.delete(games).where(eq(games.id, gameId));
+      return { ok: true as const, gameDeleted: true as const };
+    }
+    await db
+      .update(games)
+      .set({ hostPlayerId: nextHost.id })
+      .where(eq(games.id, gameId));
+  }
+
+  await db.delete(gamePlayers).where(eq(gamePlayers.id, playerId));
+  return { ok: true as const, gameDeleted: false as const };
 }
 
 export { getGamePlayers };

@@ -8,6 +8,7 @@ export default function CardButton({
   onZoom,
   badge,
   disabled,
+  dim = true,
 }: {
   item: DeckItemData;
   selected?: boolean;
@@ -15,6 +16,9 @@ export default function CardButton({
   onZoom: (item: DeckItemData) => void;
   badge?: React.ReactNode;
   disabled?: boolean;
+  // When false, a disabled card keeps full image brightness (no opacity dim).
+  // Used in the vote grid so cards stay true-to-color while you watch/wait.
+  dim?: boolean;
 }) {
   return (
     <div className={`card-frame group ${selected ? "selected" : ""}`}>
@@ -23,7 +27,7 @@ export default function CardButton({
         disabled={disabled && !onClick}
         className={`relative block w-full transition-transform duration-200 ${
           selected ? "scale-[1.04]" : ""
-        } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+        } ${disabled ? `cursor-not-allowed${dim ? " opacity-50" : ""}` : "cursor-pointer"}`}
       >
         <DeckItem item={item} />
         {selected && (

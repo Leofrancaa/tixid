@@ -26,6 +26,10 @@ function tokenLabel(seatOrder: number) {
 }
 
 const STREAK_THRESHOLD = 3;
+// Max token dots drawn inside a single board square before collapsing the rest
+// into a "+N" pill. Keeps a crowded square (e.g. everyone at the start) on one
+// row so it never overflows and hides the squares below it.
+const MAX_TOKENS_PER_SQUARE = 5;
 
 export default function RaceTrack({
   players,
@@ -130,11 +134,18 @@ export default function RaceTrack({
             }}
           >
             {squares.map((sq) => {
-              const tokens = tokensAt[sq] ?? [];
+              const tokensRaw = tokensAt[sq] ?? [];
+              // Show my own token first so I can always spot myself, even when
+              // the square is crowded and the rest collapse into "+N".
+              const tokens = [...tokensRaw].sort((a, b) =>
+                a.player.id === myId ? -1 : b.player.id === myId ? 1 : 0
+              );
+              const shown = tokens.slice(0, MAX_TOKENS_PER_SQUARE);
+              const overflow = tokens.length - shown.length;
               return (
                 <div
                   key={sq}
-                  className="relative flex flex-col items-center justify-center rounded"
+                  className="relative flex flex-col items-center justify-center overflow-hidden rounded"
                   style={{
                     aspectRatio: "1",
                     background: sq === 0
@@ -159,8 +170,8 @@ export default function RaceTrack({
                   </span>
 
                   {tokens.length > 0 && (
-                    <div className="flex flex-wrap justify-center gap-px">
-                      {tokens.map(({ player }) => {
+                    <div className="flex items-center justify-center">
+                      {shown.map(({ player }, idx) => {
                         const onStreak = (player.current_streak ?? 0) >= STREAK_THRESHOLD;
                         const baseShadow = player.id === myId
                           ? `0 0 5px ${tokenColor(player.seat_order)}`
@@ -183,22 +194,34 @@ export default function RaceTrack({
                               fontSize: "clamp(6px, 0.8vw, 8px)",
                               backgroundColor: tokenColor(player.seat_order),
                               boxShadow: onStreak ? streakShadow : baseShadow,
-                              opacity: player.id === myId ? 1 : 0.8,
+                              opacity: player.id === myId ? 1 : 0.85,
+                              marginLeft: idx === 0 ? 0 : "-3px",
+                              zIndex: shown.length - idx,
+                              border: "1px solid rgba(8,8,16,0.55)",
                             }}
                           >
                             {tokenLabel(player.seat_order)}
-                            {onStreak && (
-                              <span
-                                aria-hidden
-                                className="pointer-events-none absolute -right-1 -top-1 select-none"
-                                style={{ fontSize: "clamp(7px, 1vw, 9px)", lineHeight: 1 }}
-                              >
-                                🔥
-                              </span>
-                            )}
                           </button>
                         );
                       })}
+                      {overflow > 0 && (
+                        <span
+                          title={`+${overflow} jogadores`}
+                          className="inline-flex items-center justify-center rounded-full font-label font-bold"
+                          style={{
+                            width: "clamp(10px, 1.6vw, 14px)",
+                            height: "clamp(10px, 1.6vw, 14px)",
+                            fontSize: "clamp(6px, 0.8vw, 8px)",
+                            marginLeft: "-3px",
+                            zIndex: 0,
+                            background: "rgba(242,236,216,0.22)",
+                            color: "rgba(8,8,16,0.85)",
+                            border: "1px solid rgba(8,8,16,0.55)",
+                          }}
+                        >
+                          +{overflow}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
